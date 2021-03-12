@@ -660,7 +660,7 @@ void lcPiecesLibrary::ReadDirectoryDescriptions(const QFileInfoList (&FileLists)
 	lcMemFile IndexFile;
 	std::vector<const char*> CachedDescriptions;
 
-	if (ReadDirectoryCacheFile(IndexFileName, IndexFile))
+	if (!lcGetProfileInt(LC_PROFILE_UPDATE_CACHE_INDEX) && ReadDirectoryCacheFile(IndexFileName, IndexFile))
 	{
 		QString LibraryPath = IndexFile.ReadQString();
 
@@ -1059,6 +1059,9 @@ bool lcPiecesLibrary::WriteDirectoryCacheFile(const QString& FileName, lcMemFile
 
 bool lcPiecesLibrary::LoadCacheIndex(const QString& FileName)
 {
+	if (lcGetProfileInt(LC_PROFILE_UPDATE_CACHE_INDEX))
+		return false;
+
 	lcMemFile IndexFile;
 
 	if (!ReadArchiveCacheFile(FileName, IndexFile))

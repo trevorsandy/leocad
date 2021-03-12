@@ -942,6 +942,10 @@ lcStartupMode lcApplication::Initialize(const QList<QPair<QString, bool>>& Libra
 			StdErr.flush();
 		}
 	}
+	else if (lcGetProfileInt(LC_PROFILE_UPDATE_CACHE_INDEX))
+	{
+		lcSetProfileInt(LC_PROFILE_UPDATE_CACHE_INDEX, 0);
+	}
 
 	mPreferences.mShadingMode = Options.ShadingMode;
 	mPreferences.mLineWidth = Options.LineWidth;
@@ -1275,6 +1279,7 @@ void lcApplication::ShowPreferencesDialog()
 	lcSetProfileInt(LC_PROFILE_CHECK_UPDATES, Options.CheckForUpdates);
 	lcSetProfileInt(LC_PROFILE_ANTIALIASING_SAMPLES, Options.AASamples);
 	lcSetProfileInt(LC_PROFILE_STUD_STYLE, static_cast<int>(Options.StudStyle));
+	lcSetProfileInt(LC_PROFILE_UPDATE_CACHE_INDEX, static_cast<int>(PreferOfficialPartsChanged));
 
 	if (LanguageChanged || LibraryChanged || AAChanged || PreferOfficialPartsChanged)
 		QMessageBox::information(gMainWindow, tr("LeoCAD"), tr("Some changes will only take effect the next time you start LeoCAD."));
