@@ -42,6 +42,7 @@ lcPiecesLibrary::lcPiecesLibrary()
 	mHasUnofficialDirectory = false;
 	mCancelLoading = false;
 	mStudStyle = static_cast<lcStudStyle>(lcGetProfileInt(LC_PROFILE_STUD_STYLE));
+	mPreferOfficialParts = lcGetProfileInt(LC_PROFILE_PREFER_OFFICIAL_PARTS);
 }
 
 lcPiecesLibrary::~lcPiecesLibrary()
@@ -446,9 +447,17 @@ bool lcPiecesLibrary::OpenArchive(std::unique_ptr<lcFile> File, lcZipFileType Zi
 					Info->mFileName[sizeof(Info->mFileName) - 1] = 0;
 
 					mPieces[Name] = Info;
-				}
 
-				Info->SetZipFile(ZipFileType, FileIdx);
+					Info->SetZipFile(ZipFileType, FileIdx);
+				}
+				else if (ZipFileType == lcZipFileType::Unofficial && Info->mZipFileType == lcZipFileType::Official && mPreferOfficialParts)
+				{
+					continue;
+				}
+				else
+				{
+					Info->SetZipFile(ZipFileType, FileIdx);
+				}
 			}
 			else
 				Source->Primitives[Name] = new lcLibraryPrimitive(QString(), FileInfo.file_name + (Name - NameBuffer), ZipFileType, FileIdx, false, false, true);
@@ -522,7 +531,7 @@ void lcPiecesLibrary::ReadArchiveDescriptions(const QString& OfficialFileName, c
 
 bool lcPiecesLibrary::OpenDirectory(const QDir& LibraryDir, bool ShowProgress)
 {
-	const QLatin1String BaseFolders[LC_NUM_FOLDERTYPES] = { QLatin1String("unofficial/"), QLatin1String("") };
+	const QLatin1String BaseFolders[LC_NUM_FOLDERTYPES] = { mPreferOfficialParts ? QLatin1String("") : QLatin1String("unofficial/"), mPreferOfficialParts ? QLatin1String("unofficial/") : QLatin1String("") };
 	constexpr int NumBaseFolders = LC_ARRAY_COUNT(BaseFolders);
 
 	QFileInfoList FileLists[NumBaseFolders];
@@ -697,7 +706,9 @@ void lcPiecesLibrary::ReadDirectoryDescriptions(const QFileInfoList (&FileLists)
 			}
 			*Dst = 0;
 
-			if (FolderIdx == LC_FOLDER_OFFICIAL && mHasUnofficialDirectory && mPieces.find(Name) != mPieces.end())
+			if (FolderIdx == LC_FOLDER_UNOFFICIAL && mPreferOfficialParts && mPieces.find(Name) != mPieces.end())
+				continue;
+			else if (FolderIdx == LC_FOLDER_OFFICIAL && mHasUnofficialDirectory && mPieces.find(Name) != mPieces.end())
 				continue;
 
 			PieceInfo* Info = new PieceInfo();
@@ -1242,7 +1253,7 @@ bool lcPiecesLibrary::LoadPieceData(PieceInfo* Info)
 
 	if (Info->mZipFileType != lcZipFileType::Count && mZipFiles[static_cast<int>(Info->mZipFileType)])
 	{
-		if (LoadCachePiece(Info))
+		if (mPreferOfficialParts && LoadCachePiece(Info))
 			return true;
 
 		lcMemFile PieceFile;
@@ -1257,9 +1268,9 @@ bool lcPiecesLibrary::LoadPieceData(PieceInfo* Info)
 		char FileName[LC_MAXPATH];
 		lcDiskFile PieceFile;
 
-		if (mHasUnofficialDirectory)
+		if (mPreferOfficialParts ? true : mHasUnofficialDirectory)
 		{
-			sprintf(FileName, "unofficial/parts/%s", Info->mFileName);
+			sprintf(FileName, "%s/%s", (mPreferOfficialParts ? "parts" : "unofficial/parts"), Info->mFileName);
 			PieceFile.SetFileName(mLibraryDir.absoluteFilePath(QLatin1String(FileName)));
 			if (PieceFile.Open(QIODevice::ReadOnly))
 				Loaded = MeshLoader.LoadMesh(PieceFile, LC_MESHDATA_SHARED);
@@ -1267,7 +1278,7 @@ bool lcPiecesLibrary::LoadPieceData(PieceInfo* Info)
 
 		if (!Loaded)
 		{
-			sprintf(FileName, "parts/%s", Info->mFileName);
+			sprintf(FileName, "%s/%s", (mPreferOfficialParts ? "unofficial/parts" : "parts"), Info->mFileName);
 			PieceFile.SetFileName(mLibraryDir.absoluteFilePath(QLatin1String(FileName)));
 			if (PieceFile.Open(QIODevice::ReadOnly))
 				Loaded = MeshLoader.LoadMesh(PieceFile, LC_MESHDATA_SHARED);
@@ -1334,16 +1345,16 @@ void lcPiecesLibrary::GetPieceFile(const char* PieceName, std::function<void(lcF
 			char FileName[LC_MAXPATH];
 			bool Found = false;
 
-			if (mHasUnofficialDirectory)
+			if (mPreferOfficialParts ? true : mHasUnofficialDirectory)
 			{
-				sprintf(FileName, "unofficial/parts/%s", Info->mFileName);
+				sprintf(FileName, "%s/%s", (mPreferOfficialParts ? "parts" : "unofficial/parts"), Info->mFileName);
 				IncludeFile.SetFileName(mLibraryDir.absoluteFilePath(QLatin1String(FileName)));
 				Found = IncludeFile.Open(QIODevice::ReadOnly);
 			}
 
 			if (!Found)
 			{
-				sprintf(FileName, "parts/%s", Info->mFileName);
+				sprintf(FileName, "%s/%s", (mPreferOfficialParts ? "unofficial/parts" : "parts"), Info->mFileName);
 				IncludeFile.SetFileName(mLibraryDir.absoluteFilePath(QLatin1String(FileName)));
 				Found = IncludeFile.Open(QIODevice::ReadOnly);
 			}
@@ -1360,6 +1371,10 @@ void lcPiecesLibrary::GetPieceFile(const char* PieceName, std::function<void(lcF
 		{
 			lcMemFile IncludeFile;
 
+			char Folder[LC_MAXNAME];
+
+			lcZipFileType ZipFileType = mPreferOfficialParts ? lcZipFileType::Official : lcZipFileType::Unofficial;
+
 			auto LoadIncludeFile = [&IncludeFile, PieceName, this](const char* Folder, lcZipFileType ZipFileType)
 			{
 				char IncludeFileName[LC_MAXPATH];
@@ -1367,20 +1382,30 @@ void lcPiecesLibrary::GetPieceFile(const char* PieceName, std::function<void(lcF
 				return mZipFiles[static_cast<int>(ZipFileType)]->ExtractFile(IncludeFileName, IncludeFile);
 			};
 
-			if (mHasUnofficialDirectory)
+			if (mPreferOfficialParts ? true : mHasUnofficialDirectory)
 			{
-				Found = LoadIncludeFile("parts/%s", lcZipFileType::Unofficial);
+				sprintf(Folder, "%s/%%s", (mPreferOfficialParts ? "ldraw/parts" : "parts"));
+				Found = LoadIncludeFile(Folder, ZipFileType);
 
 				if (!Found)
-					Found = LoadIncludeFile("p/%s", lcZipFileType::Unofficial);
+				{
+					sprintf(Folder, "%s/%%s", (mPreferOfficialParts ? "ldraw/p" : "p"));
+					Found = LoadIncludeFile(Folder, ZipFileType);
+				}
 			}
 
 			if (!Found)
 			{
-				Found = LoadIncludeFile("ldraw/parts/%s", lcZipFileType::Official);
+				ZipFileType = mPreferOfficialParts ? lcZipFileType::Unofficial : lcZipFileType::Official;
+
+				sprintf(Folder, "%s/%%s", (mPreferOfficialParts ? "parts" : "ldraw/parts"));
+				Found = LoadIncludeFile(Folder, ZipFileType);
 
 				if (!Found)
-					Found = LoadIncludeFile("ldraw/p/%s", lcZipFileType::Official);
+				{
+					sprintf(Folder, "%s/%%s", (mPreferOfficialParts ? "p" : "ldraw/p"));
+					Found = LoadIncludeFile(Folder, ZipFileType);
+				}
 			}
 
 			if (Found)
@@ -1406,20 +1431,20 @@ void lcPiecesLibrary::GetPieceFile(const char* PieceName, std::function<void(lcF
 #endif
 			};
 
-			if (mHasUnofficialDirectory)
+			if (mPreferOfficialParts ? true : mHasUnofficialDirectory)
 			{
-				Found = LoadIncludeFile(QLatin1String("unofficial/parts/"));
+				Found = LoadIncludeFile(mPreferOfficialParts ? QLatin1String("parts/") : QLatin1String("unofficial/parts/"));
 
 				if (!Found)
-					Found = LoadIncludeFile(QLatin1String("unofficial/p/"));
+					Found = LoadIncludeFile(mPreferOfficialParts ? QLatin1String("p/") : QLatin1String("unofficial/p/"));
 			}
 
 			if (!Found)
 			{
-				Found = LoadIncludeFile(QLatin1String("parts/"));
+				Found = LoadIncludeFile(mPreferOfficialParts ? QLatin1String("unofficial/parts/") : QLatin1String("parts/"));
 
 				if (!Found)
-					Found = LoadIncludeFile(QLatin1String("p/"));
+					Found = LoadIncludeFile(mPreferOfficialParts ? QLatin1String("unofficial/p/") : QLatin1String("p/"));
 			}
 
 			if (Found)
@@ -1518,13 +1543,17 @@ bool lcPiecesLibrary::LoadTexture(lcTexture* Texture)
 	{
 		lcMemFile TextureFile;
 
-		sprintf(FileName, "parts/textures/%s.png", Texture->mName);
+		lcZipFileType ZipFileType = mPreferOfficialParts ? lcZipFileType::Official : lcZipFileType::Unofficial;
 
-		if (!mZipFiles[static_cast<int>(lcZipFileType::Unofficial)] || !mZipFiles[static_cast<int>(lcZipFileType::Unofficial)]->ExtractFile(FileName, TextureFile))
+		sprintf(FileName, (mPreferOfficialParts ? "ldraw/parts/textures/%s.png" : "parts/textures/%s.png"), Texture->mName);
+
+		if (!mZipFiles[static_cast<int>(ZipFileType)] || !mZipFiles[static_cast<int>(ZipFileType)]->ExtractFile(FileName, TextureFile))
 		{
-			sprintf(FileName, "ldraw/parts/textures/%s.png", Texture->mName);
+			ZipFileType = mPreferOfficialParts ? lcZipFileType::Unofficial : lcZipFileType::Official;
 
-			if (!mZipFiles[static_cast<int>(lcZipFileType::Official)]->ExtractFile(FileName, TextureFile))
+			sprintf(FileName, (mPreferOfficialParts ? "parts/textures/%s.png" : "ldraw/parts/textures/%s.png"), Texture->mName);
+
+			if (!mZipFiles[static_cast<int>(ZipFileType)]->ExtractFile(FileName, TextureFile))
 				return false;
 		}
 
