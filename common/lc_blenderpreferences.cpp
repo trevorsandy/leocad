@@ -391,6 +391,7 @@ lcBlenderPreferences::lcBlenderPreferences(int Width, int Height, double Scale, 
 	mScale = Scale;
 
 	mDialogCancelled = false;
+	mDownloading = false;
 
 	QVBoxLayout* Layout = new QVBoxLayout(Parent);
 
@@ -949,7 +950,6 @@ void lcBlenderPreferences::ConfigureBlenderAddon(bool TestBlender, bool AddonUpd
 	{
 		mBlenderVersion.clear();
 		mConfigured = false;
-		StatusUpdate(false, true);
 		mAddonUpdateButton->setEnabled(mConfigured);
 		mPathsBox->setEnabled(mConfigured);
 		mSettingsBox->setEnabled(mConfigured);
@@ -1167,6 +1167,7 @@ void lcBlenderPreferences::ConfigureBlenderAddon(bool TestBlender, bool AddonUpd
 				if (Result == PR_OK)
 				{
 					mBlenderVersionLabel->setText(tr("Blender"));
+					mExeGridLayout->replaceWidget(mProgressBar, mBlenderVersionEdit);
 					lcSetProfileString(LC_PROFILE_BLENDER_VERSION, mBlenderVersion);
 					lcSetProfileString(LC_PROFILE_BLENDER_PATH, BlenderExe);
 				}
@@ -1248,7 +1249,7 @@ void lcBlenderPreferences::ConfigureBlenderAddon(bool TestBlender, bool AddonUpd
 				return;
 			}
 
-			StatusUpdate(true, false, tr("Installing..."));
+			mAddonVersionLabel->setText(tr("Installing..."));
 
 			emit SettingChangedSig(true);
 		}
@@ -1282,8 +1283,6 @@ void lcBlenderPreferences::ConfigureBlenderAddon(bool TestBlender, bool AddonUpd
 		else if (!mRenderActBox->isChecked())
 			Arguments << QString("--disable_ldraw_render");
 		Arguments << QString("--leocad");
-
-		Message = tr("Blender Addon Install Arguments: %1 %2").arg(BlenderExe).arg(Arguments.join(" "));
 
 		if (!TestBlender)
 			mBlenderVersionFound = false;
@@ -1357,7 +1356,7 @@ bool lcBlenderPreferences::ExtractBlenderAddon(const QString& BlenderDir)
 	AddonEnc AddonAction = AddonEnc(GetBlenderAddon(BlenderDir));
 	if (AddonAction == ADDON_EXTRACT)
 	{
-		gAddonPreferences->StatusUpdate(true, false, tr("Extracting..."));
+		mAddonVersionLabel->setText(tr("Extracting..."));
 		const QString BlenderAddonFile = QDir::toNativeSeparators(QString("%1/%2").arg(BlenderDir).arg(LC_BLENDER_ADDON_FILE));
 
 		QString Result;
@@ -1418,6 +1417,7 @@ int lcBlenderPreferences::GetBlenderAddon(const QString& BlenderDir)
 
 	auto GetBlenderAddonVersionMatch = [&]()
 	{
+		gAddonPreferences->mDownloading = true;
 		lcHttpManager* HttpManager = new lcHttpManager(gAddonPreferences);
 		connect(HttpManager, SIGNAL(DownloadFinished(lcHttpReply*)), gAddonPreferences, SLOT(DownloadFinished(lcHttpReply*)));
 		gAddonPreferences->mHttpReply = HttpManager->DownloadFile(QLatin1String(LC_BLENDER_ADDON_LATEST_URL));
@@ -1556,6 +1556,7 @@ int lcBlenderPreferences::GetBlenderAddon(const QString& BlenderDir)
 	};
 
 	BlenderAddonValidated = false;
+	gAddonPreferences->mDownloading = true;
 	lcHttpManager* HttpManager = new lcHttpManager(gAddonPreferences);
 	connect(HttpManager, SIGNAL(DownloadFinished(lcHttpReply*)), gAddonPreferences, SLOT(DownloadFinished(lcHttpReply*)));
 	gAddonPreferences->mHttpReply = HttpManager->DownloadFile(QLatin1String(LC_BLENDER_ADDON_URL));
@@ -1598,6 +1599,7 @@ int lcBlenderPreferences::GetBlenderAddon(const QString& BlenderDir)
 				const QString ShaCalculated = Sha256Hash.result().toHex();
 
 				gAddonPreferences->mData.clear();
+				gAddonPreferences->mDownloading = true;
 				gAddonPreferences->mHttpReply = HttpManager->DownloadFile(QLatin1String(LC_BLENDER_ADDON_SHA_HASH_URL));
 				while (gAddonPreferences->mHttpReply)
 					QApplication::processEvents();
@@ -2087,6 +2089,8 @@ bool lcBlenderPreferences::PromptCancel()
 
 void lcBlenderPreferences::Update()
 {
+	if (mDownloading)
+		return;
 #ifndef QT_NO_PROCESS
 	if (!mProcess)
 		return;
@@ -3674,6 +3678,7 @@ void lcBlenderPreferences::DownloadFinished(lcHttpReply* Reply)
 		ShowMessage(this, tr("Addon download failed."));
 
 	mHttpReply = nullptr;
+	mDownloading = false;
 
 	Reply->deleteLater();
 }

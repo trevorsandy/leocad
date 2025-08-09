@@ -457,6 +457,7 @@ private:
 	bool mConfigured;
 	bool mDialogCancelled;
 	bool mBlenderVersionFound;
+	bool mDownloading;
 };
 
 extern class lcBlenderPreferences* gAddonPreferences;
