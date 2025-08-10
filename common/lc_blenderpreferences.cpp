@@ -966,7 +966,7 @@ void lcBlenderPreferences::ConfigureBlenderAddon(bool TestBlender, bool AddonUpd
 		const QString BlenderConfigDir = QString("%1/setup/addon_setup/config").arg(BlenderDir);
 		const QString BlenderAddonDir = QDir::toNativeSeparators(QString("%1/addons").arg(BlenderDir));
 		const QString BlenderExeCompare = QDir::toNativeSeparators(lcGetProfileString(LC_PROFILE_BLENDER_PATH)).toLower();
-		const QString BlenderInstallFile = QDir::toNativeSeparators(QString("%1/%2").arg(BlenderDir).arg(LC_BLENDER_ADDON_INSTALL_FILE));
+		const QString BlenderInstallFile = QDir::toNativeSeparators(QString("%1/%2").arg(BlenderDir, LC_BLENDER_ADDON_INSTALL_FILE));
 		const QString BlenderTestString = QLatin1String("###TEST_BLENDER###");
 		QByteArray AddonPathsAndModuleNames;
 		QString Message;
@@ -1083,7 +1083,7 @@ void lcBlenderPreferences::ConfigureBlenderAddon(bool TestBlender, bool AddonUpd
 
 			if (!mProcess->waitForStarted())
 			{
-				Message = tr("Cannot start Blender %1 mProcess.\n%2").arg(ProcessAction).arg(QString(mProcess->readAllStandardError()));
+				Message = tr("Cannot start Blender %1 mProcess.\n%2").arg(ProcessAction, QString(mProcess->readAllStandardError()));
 				delete mProcess;
 				mProcess = nullptr;
 				return PR_FAIL;
@@ -1092,7 +1092,7 @@ void lcBlenderPreferences::ConfigureBlenderAddon(bool TestBlender, bool AddonUpd
 			{
 				if (mProcess->exitStatus() != QProcess::NormalExit || mProcess->exitCode() != 0)
 				{
-					Message = tr("Failed to execute Blender %1.\n%2").arg(ProcessAction).arg(QString(mProcess->readAllStandardError()));
+					Message = tr("Failed to execute Blender %1.\n%2").arg(ProcessAction, QString(mProcess->readAllStandardError()));
 					return PR_FAIL;
 				}
 			}
@@ -1131,7 +1131,7 @@ void lcBlenderPreferences::ConfigureBlenderAddon(bool TestBlender, bool AddonUpd
 							// set default LDraw import module if not configured
 							if (!mImportActBox->isChecked() && !mImportMMActBox->isChecked())
 								mImportActBox->setChecked(true);
-							Message = tr("Blender %1 mProcess completed. Version: %2 validated.").arg(ProcessAction).arg(mBlenderVersion);
+							Message = tr("Blender %1 mProcess completed. Version: %2 validated.").arg(ProcessAction, mBlenderVersion);
 						}
 					}
 				}
@@ -1200,8 +1200,8 @@ void lcBlenderPreferences::ConfigureBlenderAddon(bool TestBlender, bool AddonUpd
 
 			if (TestBlender)
 			{
-				const QString preferredImportModule = mImportActBox->isChecked() ? QString("TN") : mImportMMActBox->isChecked() ? QString("MM") : QString();  // disable all import modules
-				lcSetProfileString(LC_PROFILE_BLENDER_IMPORT_MODULE, preferredImportModule);
+				const QString PreferredImportModule = mImportActBox->isChecked() ? QString("TN") : mImportMMActBox->isChecked() ? QString("MM") : QString();  // disable all import modules
+				lcSetProfileString(LC_PROFILE_BLENDER_IMPORT_MODULE, PreferredImportModule);
 			}
 			else
 				mBlenderVersionEdit->setVisible(AddonUpdate);
@@ -1242,7 +1242,7 @@ void lcBlenderPreferences::ConfigureBlenderAddon(bool TestBlender, bool AddonUpd
 				return;
 			}
 
-			if (!QFileInfo(BlenderInstallFile).exists())
+			if (!QFileInfo::exists(BlenderInstallFile))
 			{
 				ShowMessage(this, tr("Could not find addon install file: %1").arg(BlenderInstallFile));
 				StatusUpdate(true, true, tr("Not found."));
@@ -1291,9 +1291,9 @@ void lcBlenderPreferences::ConfigureBlenderAddon(bool TestBlender, bool AddonUpd
 		{
 			QJsonArray JsonArray;
 			QStringList AddonDirs = QDir(BlenderAddonDir).entryList(QDir::NoDotAndDotDot | QDir::Dirs, QDir::SortByMask);
-			for (const QString& Addon : AddonDirs)
+			for (QString& Addon : AddonDirs)
 			{
-				QDir Dir(QString("%1/%2").arg(BlenderAddonDir).arg(Addon));
+				QDir Dir(QString("%1/%2").arg(BlenderAddonDir, Addon));
 				Dir.setFilter(QDir::Files | QDir::NoDotAndDotDot | QDir::NoSymLinks);
 				QFileInfoList List = Dir.entryInfoList();
 				for (int LblIdx = 0; LblIdx < List.size(); LblIdx++)
@@ -1303,7 +1303,7 @@ void lcBlenderPreferences::ConfigureBlenderAddon(bool TestBlender, bool AddonUpd
 						QFile File(QFileInfo(List.at(LblIdx)).absoluteFilePath());
 						if (!File.open(QFile::ReadOnly | QFile::Text))
 						{
-							ShowMessage(this, tr("Cannot read addon file %1<br>%2").arg(List.at(LblIdx).fileName()).arg(File.errorString()));
+							ShowMessage(this, tr("Cannot read addon file %1<br>%2").arg(List.at(LblIdx).fileName(), File.errorString()));
 							break;
 						}
 						else
@@ -1321,10 +1321,10 @@ void lcBlenderPreferences::ConfigureBlenderAddon(bool TestBlender, bool AddonUpd
 							File.close();
 							if (FoundModule)
 							{
-								QJsonObject JsonItemObj;
-								JsonItemObj["load_dir"] = QDir::toNativeSeparators(Dir.absolutePath());
-								JsonItemObj["module_name"] = Dir.dirName();
-								JsonArray.append(JsonItemObj);
+								QJsonObject JsonObj;
+								JsonObj["load_dir"] = QDir::toNativeSeparators(Dir.absolutePath());
+								JsonObj["module_name"] = Dir.dirName();
+								JsonArray.append(JsonObj);
 							}
 						}
 					}
@@ -1337,7 +1337,7 @@ void lcBlenderPreferences::ConfigureBlenderAddon(bool TestBlender, bool AddonUpd
 
 		Result = ProcessCommand(PR_INSTALL);
 		if (Result == PR_FAIL)
-			StatusUpdate(true, true, tr("Blender install failed."));
+			StatusUpdate(true, true, tr("Install failed."));
 		else
 			StatusUpdate(true, false, tr("Blender Addon"));
 	}
@@ -1357,14 +1357,14 @@ bool lcBlenderPreferences::ExtractBlenderAddon(const QString& BlenderDir)
 	if (AddonAction == ADDON_EXTRACT)
 	{
 		mAddonVersionLabel->setText(tr("Extracting..."));
-		const QString BlenderAddonFile = QDir::toNativeSeparators(QString("%1/%2").arg(BlenderDir).arg(LC_BLENDER_ADDON_FILE));
+		const QString BlenderAddonFile = QDir::toNativeSeparators(QString("%1/%2").arg(BlenderDir, LC_BLENDER_ADDON_FILE));
 
 		QString Result;
 		Extracted = gAddonPreferences->ExtractAddon(BlenderAddonFile, Result);
 
 		if (!Extracted)
 		{
-			QString Message = tr("Failed to extract %1 to %2").arg(LC_BLENDER_ADDON_FILE).arg(BlenderDir);
+			QString Message = tr("Failed to extract %1 to %2").arg(LC_BLENDER_ADDON_FILE , BlenderDir);
 			if (Result.size())
 				Message.append(" "+Result);
 
@@ -1380,8 +1380,8 @@ bool lcBlenderPreferences::ExtractBlenderAddon(const QString& BlenderDir)
 int lcBlenderPreferences::GetBlenderAddon(const QString& BlenderDir)
 {
 	const QString BlenderAddonDir = QDir::toNativeSeparators(QString("%1/addons").arg(BlenderDir));
-	const QString BlenderAddonFile = QDir::toNativeSeparators(QString("%1/%2").arg(BlenderDir).arg(LC_BLENDER_ADDON_FILE));
-	const QString AddonVersionFile = QDir::toNativeSeparators(QString("%1/%2/__version__.py").arg(BlenderAddonDir).arg(LC_BLENDER_ADDON_RENDER_FOLDER));
+	const QString BlenderAddonFile = QDir::toNativeSeparators(QString("%1/%2").arg(BlenderDir, LC_BLENDER_ADDON_FILE));
+	const QString AddonVersionFile = QDir::toNativeSeparators(QString("%1/%2/__version__.py").arg(BlenderAddonDir, LC_BLENDER_ADDON_RENDER_FOLDER));
 	bool ExtractedAddon = QFileInfo(AddonVersionFile).isReadable();
 	bool BlenderAddonValidated = ExtractedAddon || QFileInfo(BlenderAddonFile).isReadable();
 	AddonEnc AddonAction = ADDON_DOWNLOAD;
@@ -1425,8 +1425,8 @@ int lcBlenderPreferences::GetBlenderAddon(const QString& BlenderDir)
 			QApplication::processEvents();
 		if (!gAddonPreferences->mData.isEmpty())
 		{
-			QJsonDocument Json = QJsonDocument::fromJson(gAddonPreferences->mData);
-			OnlineVersion = Json.object()["tag_name"].toString();
+			QJsonObject JsonObj = QJsonDocument::fromJson(gAddonPreferences->mData).object();
+			OnlineVersion = JsonObj["tag_name"].toString();
 			gAddonPreferences->mData.clear();
 		}
 		else
@@ -1468,7 +1468,7 @@ int lcBlenderPreferences::GetBlenderAddon(const QString& BlenderDir)
 			QFile File(AddonVersionFile);
 			if (!File.open(QIODevice::ReadOnly))
 			{
-				ShowMessage(this, tr("Cannot read addon version file: [%1]<br>%2.").arg(AddonVersionFile).arg(File.errorString()));
+				ShowMessage(this, tr("Cannot read addon version file: [%1]<br>%2.").arg(AddonVersionFile, File.errorString()));
 				return false; // Download new archive
 			}
 			Ba = File.readAll();
@@ -1513,7 +1513,7 @@ int lcBlenderPreferences::GetBlenderAddon(const QString& BlenderDir)
 				if (LocalVersion.isEmpty())
 					LocalVersion = gAddonPreferences->mAddonVersion;
 				const QString& Title = tr ("%1 Blender LDraw Addon").arg(LC_PRODUCTNAME_STR);
-				const QString& Header = tr ("Detected %1 Blender LDraw addon %2. A newer version %3 exists.").arg(LC_PRODUCTNAME_STR).arg(LocalVersion).arg(OnlineVersion);
+				const QString& Header = tr ("Detected %1 Blender LDraw addon %2. A newer version %3 exists.").arg(LC_PRODUCTNAME_STR, LocalVersion, OnlineVersion);
 				const QString& Body = tr ("Do you want to download version %1 ?").arg(OnlineVersion);
 				int Exec = ShowMessage(this, Header, Title, Body, QString(), MBB_YES, QMessageBox::NoIcon);
 				if (Exec == QMessageBox::Cancel)
@@ -1534,11 +1534,11 @@ int lcBlenderPreferences::GetBlenderAddon(const QString& BlenderDir)
 
 	auto RemoveOldBlenderAddon = [&] (const QString& OldBlenderAddonFile)
 	{
-		if (QFileInfo(BlenderAddonDir).exists())
+		if (QFileInfo::exists(BlenderAddonDir))
 		{
 			bool Result = true;
 			QDir Dir(BlenderAddonDir);
-			for (QFileInfo const& FileInfo : Dir.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot | QDir::NoSymLinks, QDir::DirsFirst))
+			for (QFileInfo& FileInfo : Dir.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot | QDir::NoSymLinks, QDir::DirsFirst))
 			{
 				if (FileInfo.isDir())
 					Result &= QDir(FileInfo.absoluteFilePath()).removeRecursively();
@@ -1546,7 +1546,7 @@ int lcBlenderPreferences::GetBlenderAddon(const QString& BlenderDir)
 					Result &= QFile::remove(FileInfo.absoluteFilePath());
 			}
 
-			if (QFileInfo(OldBlenderAddonFile).exists())
+			if (QFileInfo::exists(OldBlenderAddonFile))
 				Result &= QFile::remove(OldBlenderAddonFile);
 
 			Result &= Dir.rmdir(BlenderAddonDir);
@@ -1565,7 +1565,7 @@ int lcBlenderPreferences::GetBlenderAddon(const QString& BlenderDir)
 	if (!gAddonPreferences->mData.isEmpty())
 	{
 		const QString OldBlenderAddonFile = QString("%1.hold").arg(BlenderAddonFile);
-		if (QFileInfo(BlenderAddonFile).exists())
+		if (QFileInfo::exists(BlenderAddonFile))
 		{
 			if (!QFile::rename(BlenderAddonFile, OldBlenderAddonFile))
 				ShowMessage(this, tr("Failed to rename existing Blender addon archive %1.").arg(BlenderAddonFile));
@@ -1625,17 +1625,17 @@ int lcBlenderPreferences::GetBlenderAddon(const QString& BlenderDir)
 					ShowMessage(this, tr("Failed to receive SHA hash for Blender addon %1.sha256").arg(LC_BLENDER_ADDON_FILE));
 			}
 			else
-				ShowMessage(this, tr("Failed to read Blender addon archive:<br>%1:<br>%2").arg(BlenderAddonFile).arg(File.errorString()));
+				ShowMessage(this, tr("Failed to read Blender addon archive:<br>%1:<br>%2").arg(BlenderAddonFile, File.errorString()));
 		}
 		else
-			ShowMessage(this, tr("Failed to write Blender addon archive:<br>%1:<br>%2").arg(BlenderAddonFile).arg(File.errorString()));
+			ShowMessage(this, tr("Failed to write Blender addon archive:<br>%1:<br>%2").arg(BlenderAddonFile, File.errorString()));
 
 		if (!BlenderAddonValidated)
 		{
-			if (QFileInfo(BlenderAddonFile).exists())
+			if (QFileInfo::exists(BlenderAddonFile))
 				if (!QFile::remove(BlenderAddonFile))
 					ShowMessage(this, tr("Failed to remove invalid Blender addon archive:<br>%1").arg(BlenderAddonFile));
-			if (QFileInfo(OldBlenderAddonFile).exists())
+			if (QFileInfo::exists(OldBlenderAddonFile))
 				if (!QFile::rename(OldBlenderAddonFile, BlenderAddonFile))
 					ShowMessage(this, tr("Failed to restore Blender addon archive:<br>%1 from %2").arg(ArchiveFileName, OldArchiveFileName));
 			AddonAction = ADDON_FAIL;
@@ -1650,7 +1650,7 @@ int lcBlenderPreferences::GetBlenderAddon(const QString& BlenderDir)
 	if (!BlenderAddonValidated)
 		gAddonPreferences->StatusUpdate(true, true, tr("Download failed."));
 
-	if (!QDir(BlenderAddonDir).exists() && QFileInfo(BlenderAddonFile).exists())
+	if (!QDir(BlenderAddonDir).exists() && QFileInfo::exists(BlenderAddonFile))
 		AddonAction = ADDON_EXTRACT;
 
 	return AddonAction;
@@ -1663,14 +1663,10 @@ void lcBlenderPreferences::StatusUpdate(bool Addon, bool Error, const QString& M
 	if (mProgressBar)
 	{
 		if (Addon)
-		{
 			mAddonGridLayout->replaceWidget(mProgressBar, mAddonVersionEdit);
-		}
 		else
-		{
 			mExeGridLayout->replaceWidget(mProgressBar, mBlenderVersionEdit);
-			mProgressBar->hide();
-		}
+		mProgressBar->hide();
 
 		mAddonVersionLabel->setText(Which);
 	}
@@ -1726,7 +1722,7 @@ void lcBlenderPreferences::ShowResult()
 	{
 		const QString BlenderDir = QString("%1/Blender").arg(mDataDir);
 		Message = tr("Addon install failed. See %1/stderr-blender-addon-install for details.").arg(BlenderDir);
-		StatusUpdate(true, true,tr("Error: Install failed."));
+		StatusUpdate(true, true, tr("Error: Install failed."));
 		mConfigured = false;
 
 		const QString& Title = tr ("%1 Blender Addon Install").arg(LC_PRODUCTNAME_STR);
@@ -1872,20 +1868,21 @@ void lcBlenderPreferences::GetStandardOutput()
 void lcBlenderPreferences::ReadStdOut(const QString& StdOutput, QString& Errors)
 {
 #if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
-	QRegularExpression RxInfo("^INFO: ");
-	QRegularExpression RxData("^DATA: ");
-	QRegularExpression RxError("^(?:\\w)*ERROR: ", QRegularExpression::CaseInsensitiveOption);
-	QRegularExpression RxWarning("^(?:\\w)*WARNING: ", QRegularExpression::CaseInsensitiveOption);
-	QRegularExpression RxAddonVersion("^ADDON VERSION: ", QRegularExpression::CaseInsensitiveOption);
-	QStringList StdOutLines = StdOutput.split(QRegularExpression("\n|\r\n|\r"));
+	static QRegularExpression RxInfo("^INFO: ");
+	static QRegularExpression RxData("^DATA: ");
+	static QRegularExpression RxError("^(?:\\w)*ERROR: ", QRegularExpression::CaseInsensitiveOption);
+	static QRegularExpression RxWarning("^(?:\\w)*WARNING: ", QRegularExpression::CaseInsensitiveOption);
+	static QRegularExpression RxAddonVersion("^ADDON VERSION: ", QRegularExpression::CaseInsensitiveOption);
+	static QRegularExpression RxNewLine("\n|\r\n|\r");
 #else
-	QRegExp RxInfo("^INFO: ");
-	QRegExp RxData("^DATA: ");
-	QRegExp RxError("^(?:\\w)*ERROR: ", Qt::CaseInsensitive);
-	QRegExp RxWarning("^(?:\\w)*WARNING: ", Qt::CaseInsensitive);
-	QRegExp RxAddonVersion("^ADDON VERSION: ", Qt::CaseInsensitive);
-	QStringList StdOutLines = StdOutput.split(QRegExp("\n|\r\n|\r"));
+	static QRegExp RxInfo("^INFO: ");
+	static QRegExp RxData("^DATA: ");
+	static QRegExp RxError("^(?:\\w)*ERROR: ", Qt::CaseInsensitive);
+	static QRegExp RxWarning("^(?:\\w)*WARNING: ", Qt::CaseInsensitive);
+	static QRegExp RxAddonVersion("^ADDON VERSION: ", Qt::CaseInsensitive);
+	static QRegExp RxNewLine("\n|\r\n|\r"));
 #endif
+	QStringList StdOutLines = StdOutput.split(RxNewLine);
 
 	bool ErrorEncountered = false;
 	QStringList Items, ErrorList;
@@ -1894,7 +1891,7 @@ void lcBlenderPreferences::ReadStdOut(const QString& StdOutput, QString& Errors)
 	const QString SaveVersion = mBlenderVersion;
 
 	int EditListItems = mPathLineEditList.size();
-	for (const QString& StdOutLine : StdOutLines)
+	for (QString& StdOutLine : StdOutLines)
 	{
 		if (StdOutLine.isEmpty())
 			continue;
@@ -1986,13 +1983,13 @@ void lcBlenderPreferences::ReadStdOut()
 	mStdOutList.append(StdOut);
 
 #if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
-	QRegularExpression RxInfo("^INFO: ");
-	QRegularExpression RxError("(?:\\w)*ERROR: ", QRegularExpression::CaseInsensitiveOption);
-	QRegularExpression RxWarning("(?:\\w)*WARNING: ", QRegularExpression::CaseInsensitiveOption);
+	static QRegularExpression RxInfo("^INFO: ");
+	static QRegularExpression RxError("(?:\\w)*ERROR: ", QRegularExpression::CaseInsensitiveOption);
+	static QRegularExpression RxWarning("(?:\\w)*WARNING: ", QRegularExpression::CaseInsensitiveOption);
 #else
-	QRegExp RxInfo("^INFO: ");
-	QRegExp RxError("(?:\\w)*ERROR: ", Qt::CaseInsensitive);
-	QRegExp RxWarning("(?:\\w)*WARNING: ", Qt::CaseInsensitive);
+	static QRegExp RxInfo("^INFO: ");
+	static QRegExp RxError("(?:\\w)*ERROR: ", Qt::CaseInsensitive);
+	static QRegExp RxWarning("(?:\\w)*WARNING: ", Qt::CaseInsensitive);
 #endif
 
 	bool const Error = StdOut.contains(RxError);
@@ -2034,7 +2031,7 @@ QString lcBlenderPreferences::ReadStdErr(bool& Error) const
 	QFile File(QString("%1/stderr-blender-addon-install").arg(BlenderDir));
 	if (!File.open(QFile::ReadOnly | QFile::Text))
 	{
-		const QString Message = tr("Failed to open log file: %1:\n%2").arg(File.fileName()).arg(File.errorString());
+		const QString Message = tr("Failed to open log file: %1:\n%2").arg(File.fileName(), File.errorString());
 		return Message;
 	}
 	QTextStream In(&File);
@@ -2055,13 +2052,13 @@ void lcBlenderPreferences::WriteStdOut()
 	if (File.open(QFile::WriteOnly | QIODevice::Truncate | QFile::Text))
 	{
 		QTextStream Out(&File);
-		for (const QString& Line : mStdOutList)
+		for (QString& Line : mStdOutList)
 			Out << Line << LineEnding;
 		File.close();
 		mAddonStdOutButton->setEnabled(true);
 	}
 	else
-		ShowMessage(this, tr("Error writing to %1 file '%2':\n%3").arg("stdout").arg(File.fileName(), File.errorString()));
+		ShowMessage(this, tr("Error writing to stdout file '%1':\n%2").arg(File.fileName(), File.errorString()));
 }
 
 bool lcBlenderPreferences::PromptCancel()
@@ -2527,7 +2524,7 @@ void lcBlenderPreferences::LoadSettings()
 		lcSetProfileString(LC_PROFILE_BLENDER_IMPORT_MODULE, QString());
 	}
 
-	if (!QDir(QString("%1/Blender/addons/%2").arg(gAddonPreferences->mDataDir).arg(LC_BLENDER_ADDON_RENDER_FOLDER)).isReadable())
+	if (!QDir(QString("%1/Blender/addons/%2").arg(gAddonPreferences->mDataDir, LC_BLENDER_ADDON_RENDER_FOLDER)).isReadable())
 		lcSetProfileString(LC_PROFILE_BLENDER_IMPORT_MODULE, QString());
 
 	bool UseArchiveLibrary = false;
@@ -2550,11 +2547,11 @@ void lcBlenderPreferences::LoadSettings()
 
 	if (!NumPaths())
 	{
-		const QString DefaultBlendFile = QString("%1/Blender/config/%2").arg(gAddonPreferences->mDataDir).arg(LC_BLENDER_ADDON_BLEND_FILE);
+		const QString DefaultBlendFile = QString("%1/Blender/config/%2").arg(gAddonPreferences->mDataDir, LC_BLENDER_ADDON_BLEND_FILE);
 
 		QStringList const AddonPaths = QStringList()
 		/* 0  PATH_BLENDER      */        << lcGetProfileString(LC_PROFILE_BLENDER_PATH)
-		/* 1  PATH_BLENDFILE    */        << (QFileInfo(DefaultBlendFile).exists() ? DefaultBlendFile : QString())
+		/* 1  PATH_BLENDFILE    */        << (QFileInfo::exists(DefaultBlendFile) ? DefaultBlendFile : QString())
 		/* 2  PATH_ENVIRONMENT  */        << QString()
 		/* 3  PATH_LDCONFIG     */        << lcGetProfileString(LC_PROFILE_COLOR_CONFIG)
 		/* 4  PATH_LDRAW        */        << LDrawPartsLibrary(lcGetProfileString(LC_PROFILE_PARTS_LIBRARY))
@@ -2619,7 +2616,7 @@ void lcBlenderPreferences::LoadSettings()
 				continue;
 			const QString& Key = QString("%1/%2").arg(LC_BLENDER_ADDON, mBlenderPaths[LblIdx].key);
 			const QString& Value = Settings.value(Key, QString()).toString();
-			if (QFileInfo(Value).exists())
+			if (QFileInfo::exists(Value))
 				mBlenderPaths[LblIdx].value = QDir::toNativeSeparators(Value);
 		}
 
@@ -2629,7 +2626,7 @@ void lcBlenderPreferences::LoadSettings()
 				continue;
 			const QString& Key = QString("%1/%2").arg(LC_BLENDER_ADDON_MM, mBlenderPaths[LblIdx].key_mm);
 			const QString& Value = Settings.value(Key, QString()).toString();
-			if (QFileInfo(Value).exists())
+			if (QFileInfo::exists(Value))
 				mBlenderPaths[LblIdx].value = QDir::toNativeSeparators(Value);
 		}
 
@@ -2647,7 +2644,7 @@ void lcBlenderPreferences::LoadSettings()
 			if (LblIdx == LBL_IMAGE_WIDTH || LblIdx == LBL_IMAGE_HEIGHT || LblIdx == LBL_RENDER_PERCENTAGE)
 			{
 				const QString& Label = mDefaultSettings[LblIdx].label;
-				mBlenderSettings[LblIdx].label = QString("%1 - Setting (%2)").arg(Label).arg(Value);
+				mBlenderSettings[LblIdx].label = QString("%1 - Setting (%2)").arg(Label, Value);
 			}
 		}
 
@@ -2665,7 +2662,7 @@ void lcBlenderPreferences::LoadSettings()
 			if (LblIdx == LBL_RENDER_PERCENTAGE_MM || LblIdx == LBL_RESOLUTION_WIDTH || LblIdx == LBL_RESOLUTION_HEIGHT)
 			{
 				const QString& Label = mDefaultSettingsMM[LblIdx].label;
-				mBlenderSettingsMM[LblIdx].label = QString("%1 - Setting (%2)").arg(Label).arg(Value);
+				mBlenderSettingsMM[LblIdx].label = QString("%1 - Setting (%2)").arg(Label, Value);
 			}
 		}
 	}
@@ -2689,9 +2686,8 @@ void lcBlenderPreferences::LoadSettings()
 			else
 			{
 				ShowMessage(nullptr, tr("Blender config file was not found. "
-							   "Install log check failed:<br>%1:<br>%2")
-								.arg(File.fileName())
-								.arg(File.errorString()));
+										"Install log check failed:<br>%1:<br>%2")
+										.arg(File.fileName(), File.errorString()));
 			}
 		}
 	}
@@ -2732,24 +2728,24 @@ void lcBlenderPreferences::SaveSettings()
 
 	lcSetProfileString(LC_PROFILE_BLENDER_VERSION, Value);
 
-	const QString BlenderConfigDir = QString("%1/Blender/addons/%2/config").arg(gAddonPreferences->mDataDir).arg(LC_BLENDER_ADDON_RENDER_FOLDER);
+	const QString BlenderConfigDir = QString("%1/Blender/addons/%2/config").arg(gAddonPreferences->mDataDir, LC_BLENDER_ADDON_RENDER_FOLDER);
 	
 	Value = lcGetProfileString(LC_PROFILE_BLENDER_LDRAW_CONFIG_PATH);
 	if (!Value.contains(LC_BLENDER_ADDON_RENDER_FOLDER))
 	{
-		Value = QString("%1/%2").arg(BlenderConfigDir).arg(LC_BLENDER_ADDON_CONFIG_FILE);
+		Value = QString("%1/%2").arg(BlenderConfigDir, LC_BLENDER_ADDON_CONFIG_FILE);
 		lcSetProfileString(LC_PROFILE_BLENDER_LDRAW_CONFIG_PATH, QDir::toNativeSeparators(Value));
 	}
 
 	QString searchDirectoriesKey = QLatin1String("additionalSearchPaths");
 	QString parameterFileKey = QLatin1String("ParameterFile");
-	QString ParameterFile = QString("%1/%2").arg(BlenderConfigDir).arg(LC_BLENDER_ADDON_PARAMS_FILE);
+	QString ParameterFile = QString("%1/%2").arg(BlenderConfigDir, LC_BLENDER_ADDON_PARAMS_FILE);
 
 	QSettings Settings(Value, QSettings::IniFormat);
 
 	auto concludeSettingsGroup = [&]()
 	{
-		if (!QFileInfo(ParameterFile).exists())
+		if (!QFileInfo::exists(ParameterFile))
 			ExportParameterFile();
 		Value = QDir::toNativeSeparators(QFileInfo(lcGetProfileString(LC_PROFILE_PROJECTS_PATH)).absolutePath());
 		Settings.setValue(searchDirectoriesKey, QVariant(Value));
@@ -3139,7 +3135,7 @@ void lcBlenderPreferences::SetModelSize(bool Update)
 		{
 			const QString& Title = tr ("LDraw Render Settings Conflict");
 			const QString& Header = "<b>" + tr ("Crop image configuration settings conflict were resolved.") + "</b>";
-			const QString& Body = QString("%1%2%3").arg(Conflict[0] ? tr("Keep aspect ratio set to false.<br>") : "").arg(Conflict[1] ? tr("Add environment (backdrop and base plane) set to false.<br>") : "").arg(Conflict[2] ? tr("Transparent background set to true.<br>") : "");
+			const QString& Body = QString("%1%2%3").arg(Conflict[0] ? tr("Keep aspect ratio set to false.<br>") : "", Conflict[1] ? tr("Add environment (backdrop and base plane) set to false.<br>") : "", Conflict[2] ? tr("Transparent background set to true.<br>") : "");
 			ShowMessage(this, Header, Title, Body, QString(), MBB_OK, QMessageBox::Information);
 		}
 	}
@@ -3469,8 +3465,8 @@ void lcBlenderPreferences::LoadDefaultParameters(QByteArray& Buffer, int Which)
 
 bool lcBlenderPreferences::ExportParameterFile()
 {
-	const QString BlenderConfigDir = QString("%1/Blender/addons/%2/config").arg(gAddonPreferences->mDataDir).arg(LC_BLENDER_ADDON_RENDER_FOLDER);
-	const QString ParameterFile = QString("%1/%2").arg(BlenderConfigDir).arg(LC_BLENDER_ADDON_PARAMS_FILE);
+	const QString BlenderConfigDir = QString("%1/Blender/addons/%2/config").arg(gAddonPreferences->mDataDir, LC_BLENDER_ADDON_RENDER_FOLDER);
+	const QString ParameterFile = QString("%1/%2").arg(BlenderConfigDir, LC_BLENDER_ADDON_PARAMS_FILE);
 	QDir ConfigDir(BlenderConfigDir);
 	if(!ConfigDir.exists())
 		ConfigDir.mkpath(".");
@@ -3562,8 +3558,7 @@ bool lcBlenderPreferences::ExportParameterFile()
 	else
 	{
 		Message = tr("Failed to open Blender parameter file: %1:<br>%2")
-					  .arg(File.fileName())
-					  .arg(File.errorString());
+					  .arg(File.fileName(), File.errorString());
 		ShowMessage(nullptr, Message);
 		return false;
 	}
@@ -3643,7 +3638,7 @@ int lcBlenderPreferences::ShowMessage(QWidget* Parent, const QString& Header,  c
 			if (FixedWidth == MinimumWidth)
 			{
 				int Index = (MinimumWidth / FontWidth) - 1;
-				if (!Body.mid(Index,1).isEmpty())
+				if (!QStringView(Body).mid(Index,1).isEmpty())
 					FixedWidth = Body.indexOf(" ", Index);
 			}
 			else if (FixedWidth < MinimumWidth)
@@ -3658,7 +3653,11 @@ int lcBlenderPreferences::ShowMessage(QWidget* Parent, const QString& Header,  c
 	{
 		QCheckBox* AddonVersionCheck = new QCheckBox(tr("Do not show download new addon version message again."));
 		Box.setCheckBox(AddonVersionCheck);
+#if QT_VERSION >= QT_VERSION_CHECK(6,9,0)
+		QObject::connect(AddonVersionCheck, &QCheckBox::checkStateChanged, [](int State)
+#else
 		QObject::connect(AddonVersionCheck, &QCheckBox::stateChanged, [](int State)
+#endif
 		{
 			bool VersionCheck = true;
 			if (static_cast<Qt::CheckState>(State) == Qt::CheckState::Checked)
