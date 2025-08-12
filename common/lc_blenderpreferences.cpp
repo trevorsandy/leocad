@@ -1592,7 +1592,11 @@ int lcBlenderPreferences::GetBlenderAddon(const QString& BlenderDir)
 				while (ReadSize > 0 && (BytesRead = File.read(Buf, ReadSize)) > 0)
 				{
 					DataSize -= BytesRead;
+#if QT_VERSION >= QT_VERSION_CHECK(6,4,0)
+					Sha256Hash.addData(QByteArrayView(Buf, BytesRead));
+#else
 					Sha256Hash.addData(Buf, BytesRead);
+#endif
 					ReadSize = qMin(DataSize, BufferSize);
 				}
 				File.close();
