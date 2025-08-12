@@ -573,7 +573,7 @@ lcBlenderPreferences::lcBlenderPreferences(int Width, int Height, double Scale, 
 		{
 			mModulesBox->setEnabled(false);
 			mImportActBox->setChecked(true);
-			mAddonUpdateButton->setEnabled(true);
+			mAddonUpdateButton->setEnabled(BlenderConfigured);
 			if (BlenderConfigured)
 				AddonText = tr("Addon not configured - Update.");
 			else
@@ -1067,7 +1067,7 @@ void lcBlenderPreferences::ConfigureBlenderAddon(bool TestBlender, bool AddonUpd
 			}
 			else
 			{
-				ProcessAction = Action == PR_TEST ? tr("test") : tr("packages");
+				ProcessAction = tr("test");
 				disconnect(&mUpdateTimer, SIGNAL(timeout()), this, SLOT(Update()));
 			}
 
@@ -1746,13 +1746,12 @@ void lcBlenderPreferences::ShowResult()
 		mBlenderVersionEdit->setVisible(mConfigured);
 		mPathsBox->setEnabled(mConfigured);
 		mSettingsBox->setEnabled(mConfigured);
-
+		mAddonVersionEdit->setVisible(true);
 		if (!mAddonVersion.isEmpty())
 		{
 			mAddonVersionLabel->setText(tr("Blender Addon"));
 			mAddonVersionLabel->setStyleSheet(TextColour);
 			mAddonVersionEdit->setText(mAddonVersion);
-			mAddonVersionEdit->setVisible(true);
 			mModulesBox->setEnabled(true);
 			mAddonUpdateButton->setEnabled(true);
 			lcSetProfileString(LC_PROFILE_BLENDER_VERSION, mBlenderVersion);
@@ -1760,7 +1759,8 @@ void lcBlenderPreferences::ShowResult()
 			SetModelSize(true);
 			SaveSettings();
 			mDialogCancelled = false;
-		}
+		} else
+			mAddonVersionEdit->setText(tr("undefined"));
 		Message = tr("Blender version %1").arg(mBlenderVersion);
 	}
 
@@ -1957,6 +1957,7 @@ void lcBlenderPreferences::ReadStdOut(const QString& StdOutput, QString& Errors)
 			Items = StdOutLine.split(":");
 			mAddonVersion = tr("v%1").arg(Items.at(1).trimmed());
 			mAddonVersionEdit->setText(mAddonVersion);
+			mRenderActBox->setChecked(true);
 		}
 	}
 	if (ErrorList.size())
