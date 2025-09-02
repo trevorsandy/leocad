@@ -466,21 +466,11 @@ lcBlenderPreferences::lcBlenderPreferences(int Width, int Height, double Scale, 
 		 const bool VersionCheck = static_cast<Qt::CheckState>(State) == Qt::CheckState::Checked;
 		 lcSetProfileInt(LC_PROFILE_BLENDER_ADDON_VERSION_CHECK, (int)VersionCheck);
 	});
-
-	mInstallDebugPyCheck = new QCheckBox(tr("DebugPy"), BlenderAddonVersionBox);
-	mInstallDebugPyCheck->setToolTip(tr("Include debugger module with addon install"));
-#ifndef Q_OS_WIN
-	mAddonGridLayout->addWidget(AddonVersionCheck,0,0,1,3);
-	mAddonGridLayout->addWidget(mInstallDebugPyCheck,0,3,1,1);
-#else
-	mUACPromptCheck = new QCheckBox(tr("UAC Prompt"), BlenderAddonVersionBox);
-	mUACPromptCheck->setChecked(!lcHaveFolderWritePermissions(lcGetProfileString(LC_PROFILE_BLENDER_PATH)));
-	mUACPromptCheck->setToolTip(tr("User access control prompt to install in restricted location"));
-
 	mAddonGridLayout->addWidget(AddonVersionCheck,0,0,1,2);
-	mAddonGridLayout->addWidget(mUACPromptCheck,0,2,1,1);
-	mAddonGridLayout->addWidget(mInstallDebugPyCheck,0,3,1,1);
-#endif
+
+	mInstallDebugPyCheck = new QCheckBox(tr("Install DebugPy"), BlenderAddonVersionBox);
+	mInstallDebugPyCheck->setToolTip(tr("Include debugger package with addon install"));
+	mAddonGridLayout->addWidget(mInstallDebugPyCheck,0,2,1,2);
 
 	mAddonVersionLabel = new QLabel(BlenderAddonVersionBox);
 	mAddonGridLayout->addWidget(mAddonVersionLabel,1,0);
@@ -980,8 +970,7 @@ void lcBlenderPreferences::ConfigureBlenderAddon(bool TestBlender, bool AddonUpd
 			return;
 
 #ifdef Q_OS_WIN
-		if (!mUACPromptCheck->isChecked())
-			mUACPromptCheck->setChecked(!lcHaveFolderWritePermissions(mPathLineEditList[PATH_BLENDER]->text()));
+		bool UACPrompt = !lcHaveFolderWritePermissions(mPathLineEditList[PATH_BLENDER]->text().trimmed());
 #endif
 
 		auto ProcessCommand = [&](ProcEnc Action)
@@ -1019,7 +1008,7 @@ void lcBlenderPreferences::ConfigureBlenderAddon(bool TestBlender, bool AddonUpd
 				Stream << QLatin1String("@ECHO OFF& SETLOCAL") << LineEnding;
 				if (Action == PR_PACKAGE)
 					ScriptCommand.append(QString(" --required_packages 2> \"%1\"").arg(StdErr));
-				if (mInstallDebugPyCheck->isChecked() && (Action == PR_PACKAGE || !mUACPromptCheck->isChecked()))
+				if (mInstallDebugPyCheck->isChecked() && (Action == PR_PACKAGE || !UACPrompt))
 					Stream << QLatin1String("SET INSTALL_DEBUGPY=1") << LineEnding;
 #else
 				Stream << QLatin1String("#!/bin/bash") << LineEnding;
@@ -1263,7 +1252,7 @@ void lcBlenderPreferences::ConfigureBlenderAddon(bool TestBlender, bool AddonUpd
 		Arguments << "--";
 
 #ifdef Q_OS_WIN
-		if (mUACPromptCheck->isChecked())
+		if (UACPrompt)
 		{
 			Result = ProcessCommand(PR_PACKAGE);
 			if (Result == PR_FAIL)

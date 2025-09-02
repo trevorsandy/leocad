@@ -112,7 +112,7 @@ bool lcHaveFolderWritePermissions(const QString& Path)
 	Q_CORE_EXPORT extern int qt_ntfs_permission_lookup;
 	qt_ntfs_permission_lookup++;
 #else
-	QNtfsPermissionCheckGuard permissionGuard;
+	QNtfsPermissionCheckGuard PermissionGuard;
 #endif
 
 	QFileInfo FileInfo(Path);
@@ -120,11 +120,9 @@ bool lcHaveFolderWritePermissions(const QString& Path)
 		FileInfo.setFile(FileInfo.absolutePath());
 
 	bool RetVal = FileInfo.permission(QFile::WriteUser) && FileInfo.isWritable();
-
 #if QT_VERSION < QT_VERSION_CHECK(6,6,0)
 	qt_ntfs_permission_lookup--;
 #endif
-
 	return RetVal;
 }
 
