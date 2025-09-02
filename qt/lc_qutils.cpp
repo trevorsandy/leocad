@@ -106,6 +106,28 @@ int lcTerminateChildProcess(QWidget* Parent, const qint64 Pid, const qint64 Ppid
 	return 0;
 }
 
+bool lcHaveFolderWritePermissions(const QString& Path)
+{
+#if QT_VERSION < QT_VERSION_CHECK(6,6,0)
+	Q_CORE_EXPORT extern int qt_ntfs_permission_lookup;
+	qt_ntfs_permission_lookup++;
+#else
+	QNtfsPermissionCheckGuard permissionGuard;
+#endif
+
+	QFileInfo FileInfo(Path);
+	if (!FileInfo.isDir())
+		FileInfo.setFile(FileInfo.absolutePath());
+
+	bool RetVal = FileInfo.permission(QFile::WriteUser) && FileInfo.isWritable();
+
+#if QT_VERSION < QT_VERSION_CHECK(6,6,0)
+	qt_ntfs_permission_lookup--;
+#endif
+
+	return RetVal;
+}
+
 bool lcRunElevatedProcess(const LPCWSTR ExeName, const LPCWSTR Arguments, const LPCWSTR WorkingFolder)
 {
 	SHELLEXECUTEINFO ShellExecuteInfo = {};

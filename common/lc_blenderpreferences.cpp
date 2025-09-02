@@ -453,14 +453,33 @@ lcBlenderPreferences::lcBlenderPreferences(int Width, int Height, double Scale, 
 	mAddonGridLayout = new QGridLayout(BlenderAddonVersionBox);
 	BlenderAddonVersionBox->setLayout(mAddonGridLayout);
 
-	QCheckBox* AddonVersionCheck = new QCheckBox(tr("Prompt to download new addon version when available"), BlenderAddonVersionBox);
+	QCheckBox* AddonVersionCheck = new QCheckBox(tr("Prompt to download new addon"), BlenderAddonVersionBox);
 	AddonVersionCheck->setChecked(lcGetProfileInt(LC_PROFILE_BLENDER_ADDON_VERSION_CHECK));
+	AddonVersionCheck->setToolTip(tr("When available, prompt to download new addon version"));
+#if QT_VERSION >= QT_VERSION_CHECK(6,9,0)
+	QObject::connect(AddonVersionCheck, &QCheckBox::checkStateChanged, [](int State)
+#else
 	QObject::connect(AddonVersionCheck, &QCheckBox::stateChanged, [](int State)
+#endif
 	{
 		 const bool VersionCheck = static_cast<Qt::CheckState>(State) == Qt::CheckState::Checked;
 		 lcSetProfileInt(LC_PROFILE_BLENDER_ADDON_VERSION_CHECK, (int)VersionCheck);
 	});
-	mAddonGridLayout->addWidget(AddonVersionCheck,0,0,1,4);
+
+	mInstallDebugPyCheck = new QCheckBox(tr("DebugPy"), BlenderAddonVersionBox);
+	mInstallDebugPyCheck->setToolTip(tr("Include debugger module with addon install"));
+#ifndef Q_OS_WIN
+	mAddonGridLayout->addWidget(AddonVersionCheck,0,0,1,3);
+	mAddonGridLayout->addWidget(mInstallDebugPyCheck,0,3,1,1);
+#else
+	mUACPromptCheck = new QCheckBox(tr("UAC Prompt"), BlenderAddonVersionBox);
+	mUACPromptCheck->setChecked(!lcHaveFolderWritePermissions(lcGetProfileString(LC_PROFILE_BLENDER_PATH)));
+	mUACPromptCheck->setToolTip(tr("User access control prompt to install in restricted location"));
+
+	mAddonGridLayout->addWidget(AddonVersionCheck,0,0,1,2);
+	mAddonGridLayout->addWidget(mUACPromptCheck,0,2,1,1);
+	mAddonGridLayout->addWidget(mInstallDebugPyCheck,0,3,1,1);
+#endif
 
 	mAddonVersionLabel = new QLabel(BlenderAddonVersionBox);
 	mAddonGridLayout->addWidget(mAddonVersionLabel,1,0);
@@ -549,7 +568,7 @@ lcBlenderPreferences::lcBlenderPreferences(int Width, int Height, double Scale, 
 		else
 			mBlenderVersionEdit->setText(mBlenderVersion);
 
-		if (QFileInfo(QString("%1/Blender/%2").arg(mDataDir).arg(LC_BLENDER_ADDON_FILE)).isReadable())
+		if (!QFileInfo(QString("%1/Blender/%2").arg(mDataDir, LC_BLENDER_ADDON_FILE)).isReadable())
 		{
 			mModulesBox->setEnabled(false);
 			mImportActBox->setChecked(true);
@@ -941,7 +960,7 @@ void lcBlenderPreferences::ConfigureBlenderAddon(bool TestBlender, bool AddonUpd
 	{
 		enum ProcEnc
 		{
-			PR_OK, PR_FAIL, PR_WAIT, PR_INSTALL, PR_TEST
+			PR_OK, PR_FAIL, PR_PACKAGE, PR_INSTALL, PR_TEST
 		};
 		const QString BlenderDir = QDir::toNativeSeparators(QString("%1/Blender").arg(mDataDir));
 		const QString BlenderConfigDir = QString("%1/setup/addon_setup/config").arg(BlenderDir);
@@ -950,10 +969,10 @@ void lcBlenderPreferences::ConfigureBlenderAddon(bool TestBlender, bool AddonUpd
 		const QString BlenderInstallFile = QDir::toNativeSeparators(QString("%1/%2").arg(BlenderDir).arg(LC_BLENDER_ADDON_INSTALL_FILE));
 		const QString BlenderTestString = QLatin1String("###TEST_BLENDER###");
 		QByteArray AddonPathsAndModuleNames;
-		QString Message, ShellProgram;
+		QString Message;
 		QStringList Arguments;
 		ProcEnc Result = PR_OK;
-		QFile ScriptFile;
+		QFile Script;
 
 		bool NewBlenderExe = BlenderExeCompare != BlenderExe.toLower();
 
@@ -961,23 +980,76 @@ void lcBlenderPreferences::ConfigureBlenderAddon(bool TestBlender, bool AddonUpd
 			return;
 
 #ifdef Q_OS_WIN
-		ShellProgram = QLatin1String(LC_WINDOWS_SHELL);
-#else
-		ShellProgram = QLatin1String(LC_UNIX_SHELL);
+		if (!mUACPromptCheck->isChecked())
+			mUACPromptCheck->setChecked(!lcHaveFolderWritePermissions(mPathLineEditList[PATH_BLENDER]->text()));
 #endif
+
 		auto ProcessCommand = [&](ProcEnc Action)
 		{
-#ifdef Q_OS_WIN
-			if (Action == PR_INSTALL)
+			const QString StdErr = QDir::toNativeSeparators("%1/stderr-blender-addon-install").arg(BlenderDir);
+			QString ScriptName, ScriptCommand, BaseName;
+
+			switch (Action)
 			{
-				lcRunElevatedProcess(ShellProgram.toStdWString().c_str(), QString("/C %1").arg(ScriptFile.fileName()).toStdWString().c_str(), BlenderDir.toStdWString().c_str());
+			case PR_INSTALL:
+				BaseName = "blender_addon_install";
+				break;
+			case PR_PACKAGE:
+				BaseName = "blender_package_install";
+				break;
+			case PR_TEST:
+				BaseName = "blender_test";
+				break;
+			default:
+				break;
+			}
 
-				mAddonVersionLabel->clear();
+#ifdef Q_OS_WIN
+			ScriptName =  QString("%1.bat").arg(BaseName);
+#else
+			ScriptName =  QString("%1.sh").arg(BaseName);
+#endif
+			ScriptCommand = QString("\"%1\" %2").arg(BlenderExe, Arguments.join(" "));
 
-				if (mProgressBar)
-					mProgressBar->close();
+			Script.setFileName(QString("%1/%2").arg(QDir::tempPath(), ScriptName));
+			if(Script.open(QIODevice::WriteOnly | QIODevice::Text))
+			{
+				QTextStream Stream(&Script);
+#ifdef Q_OS_WIN
+				Stream << QLatin1String("@ECHO OFF& SETLOCAL") << LineEnding;
+				if (Action == PR_PACKAGE)
+					ScriptCommand.append(QString(" --required_packages 2> \"%1\"").arg(StdErr));
+				if (mInstallDebugPyCheck->isChecked() && (Action == PR_PACKAGE || !mUACPromptCheck->isChecked()))
+					Stream << QLatin1String("SET INSTALL_DEBUGPY=1") << LineEnding;
+#else
+				Stream << QLatin1String("#!/bin/bash") << LineEnding;
+				if (mInstallDebugPyCheck->isChecked())
+					Stream << QLatin1String("export INSTALL_DEBUGPY=1") << LineEnding;
+#endif
+				Stream << ScriptCommand << LineEnding;
+				Script.close();
+			}
+			else
+			{
+				Message = tr("Cannot write Blender render script file [%1] %2.").arg(Script.fileName(), Script.errorString());
+				return PR_FAIL;
+			}
 
-				return PR_OK;
+			QThread::sleep(1);
+
+#ifdef Q_OS_WIN
+			if (Action == PR_PACKAGE)
+			{
+				lcRunElevatedProcess(QString(LC_WINDOWS_SHELL).toStdWString().c_str(), QString("/C %1").arg(Script.fileName()).toStdWString().c_str(), BlenderDir.toStdWString().c_str());
+
+				connect(&mUpdateTimer, SIGNAL(timeout()), this, SLOT(Update()));
+
+				bool Error;
+				Message = ReadStdErr(Error);
+				if (Error)
+					return PR_FAIL;
+				else
+					return PR_OK;
 			}
 #endif
 
@@ -995,33 +1067,26 @@ void lcBlenderPreferences::ConfigureBlenderAddon(bool TestBlender, bool AddonUpd
 			}
 			else
 			{
-				ProcessAction = tr("test");
+				ProcessAction = Action == PR_TEST ? tr("test") : tr("packages");
 				disconnect(&mUpdateTimer, SIGNAL(timeout()), this, SLOT(Update()));
 			}
 
 			mProcess->setWorkingDirectory(BlenderDir);
 
-			mProcess->setStandardErrorFile(QString("%1/stderr-blender-addon-install").arg(BlenderDir));
+			mProcess->setStandardErrorFile(StdErr);
 
-			if (Action == PR_INSTALL)
-			{
-				mProcess->start(BlenderExe, Arguments);
-			}
-			else
-			{
 #ifdef Q_OS_WIN
-				mProcess->start(ShellProgram, QStringList() << "/C" << ScriptFile.fileName());
+			mProcess->start(QLatin1String(LC_WINDOWS_SHELL), QStringList() << "/C" << Script.fileName());
 #else
-				mProcess->start(ShellProgram, QStringList() << ScriptFile.fileName());
+			mProcess->start(QLatin1String(LC_UNIX_SHELL), QStringList() << Script.fileName());
 #endif
-			}
 
 			if (!mProcess->waitForStarted())
 			{
 				Message = tr("Cannot start Blender %1 mProcess.\n%2").arg(ProcessAction).arg(QString(mProcess->readAllStandardError()));
 				delete mProcess;
 				mProcess = nullptr;
-				return PR_WAIT;
+				return PR_FAIL;
 			}
 			else
 			{
@@ -1087,9 +1152,9 @@ void lcBlenderPreferences::ConfigureBlenderAddon(bool TestBlender, bool AddonUpd
 			mProgressBar->setValue(1);
 
 			TestBlender |= sender() == mPathLineEditList[PATH_BLENDER];
-			mAddonVersionLabel->setText(tr("Installing..."));
 			if (TestBlender)
 			{
+				mBlenderVersionLabel->setText(tr("Blender Check..."));
 				mExeGridLayout->replaceWidget(mBlenderVersionEdit, mProgressBar);
 				mProgressBar->show();
 
@@ -1098,57 +1163,20 @@ void lcBlenderPreferences::ConfigureBlenderAddon(bool TestBlender, bool AddonUpd
 				Arguments << QString("--python-expr");
 				Arguments << QString("\"import sys;print('%1');sys.stdout.flush();sys.exit()\"").arg(BlenderTestString);
 
-				bool Error = false;
-
-				QString ScriptName, ScriptCommand;
-
-#ifdef Q_OS_WIN
-				ScriptName =  QLatin1String("blender_test.bat");
-#else
-				ScriptName =  QLatin1String("blender_test.sh");
-#endif
-				ScriptCommand = QString("\"%1\" %2").arg(BlenderExe).arg(Arguments.join(" "));
-
-				ScriptFile.setFileName(QString("%1/%2").arg(QDir::tempPath()).arg(ScriptName));
-				if (ScriptFile.open(QIODevice::WriteOnly | QIODevice::Text))
-				{
-					QTextStream Stream(&ScriptFile);
-#ifdef Q_OS_WIN
-					Stream << QLatin1String("@ECHO OFF& SETLOCAL") << LineEnding;
-#else
-					Stream << QLatin1String("#!/bin/bash") << LineEnding;
-#endif
-					Stream << ScriptCommand << LineEnding;
-					ScriptFile.close();
-				}
-				else
-				{
-					Message = tr("Error writing to file '%1':\n%2.").arg(ScriptFile.fileName(), ScriptFile.errorString());
-					Error = true;
-				}
-
-				if (Error)
-				{
-					StatusUpdate(false);
-					return;
-				}
-
-				QThread::sleep(1);
-
 				Result = ProcessCommand(PR_TEST);
-				bool TestOk = Result != PR_FAIL;
-				const QString statusLabel = TestOk ? "" : tr("Blender test failed.");
-				StatusUpdate(false, TestOk, statusLabel);
-				if (TestOk)
+				if (Result == PR_OK)
 				{
+					mBlenderVersionLabel->setText(tr("Blender"));
 					lcSetProfileString(LC_PROFILE_BLENDER_VERSION, mBlenderVersion);
 					lcSetProfileString(LC_PROFILE_BLENDER_PATH, BlenderExe);
 				}
 				else
 				{
+					const QString& Status = tr("Blender test failed.");
 					const QString& Title = tr ("%1 Blender LDraw Addon").arg(LC_PRODUCTNAME_STR);
-					const QString& Header = tr ("Blender test failed.");
+					const QString& Header = Status;
 					ShowMessage(this, Header, Title, Message);
+					StatusUpdate(false, true, Status);
 					return;
 				}
 			} // Test Blender
@@ -1230,8 +1258,21 @@ void lcBlenderPreferences::ConfigureBlenderAddon(bool TestBlender, bool AddonUpd
 		Arguments.clear();
 		Arguments << QString("--background");
 		Arguments << QString("--python");
-		Arguments << BlenderInstallFile;
+		Arguments << QString("\"%1\"").arg(BlenderInstallFile);
 		Arguments << "--";
+
+#ifdef Q_OS_WIN
+		if (mUACPromptCheck->isChecked())
+		{
+			Result = ProcessCommand(PR_PACKAGE);
+			if (Result == PR_FAIL)
+			{
+				StatusUpdate(true, true, tr("Packages failed."));
+				return;
+			}
+		}
+#endif
+
 		if (!mRenderActBox->isChecked() && !mImportActBox->isChecked() && !mImportMMActBox->isChecked())
 			Arguments << QString("--disable_ldraw_addons");
 		else if (!mImportActBox->isChecked())
@@ -1295,44 +1336,11 @@ void lcBlenderPreferences::ConfigureBlenderAddon(bool TestBlender, bool AddonUpd
 			AddonPathsAndModuleNames = JsonDoc.toJson(QJsonDocument::Compact);
 		}
 
-#ifdef Q_OS_WIN
-		bool Error = false;
-
-		QString ScriptName =  QLatin1String("blender_install.bat");
-
-		ScriptFile.setFileName(QString("%1/%2").arg(QDir::tempPath()).arg(ScriptName));
-		if (ScriptFile.open(QIODevice::WriteOnly | QIODevice::Text))
-		{
-			const QString& LdrawLibPath = QFileInfo(lcGetProfileString(LC_PROFILE_PARTS_LIBRARY)).absolutePath();
-			QTextStream Stream(&ScriptFile);
-
-			Stream << QLatin1String("@ECHO OFF& SETLOCAL") << Qt::endl;
-			Stream << QLatin1String("SET LDRAW_DIRECTORY=") << LdrawLibPath << Qt::endl;
-			Stream << QLatin1String("SET ADDONS_TO_LOAD=") << AddonPathsAndModuleNames << Qt::endl;
-			Stream << QString("\"%1\"").arg(BlenderExe);
-			for (const QString& Argument : Arguments)
-				Stream << " " << QString("\"%1\"").arg(Argument);
-			Stream << Qt::endl;
-
-			ScriptFile.close();
-		}
-		else
-		{
-			Message = tr("Error writing to file '%1':\n%2.").arg(ScriptFile.fileName(), ScriptFile.errorString());
-			Error = true;
-		}
-
-		if (Error)
-		{
-			StatusUpdate(false);
-			return;
-		}
-#endif
-
 		Result = ProcessCommand(PR_INSTALL);
-
-		if (Result != PR_OK)
-			StatusUpdate(true, true, tr("Install failed."));
+		if (Result == PR_FAIL)
+			StatusUpdate(true, true, tr("Blender install failed."));
+		else
+			StatusUpdate(true, false, tr("Blender Addon"));
 	}
 	else
 		ShowMessage(this, tr("Blender executable not found at [%1]").arg(BlenderExe), tr("Addon install failed."));

@@ -413,6 +413,10 @@ private:
 	QList<QCheckBox*> mCheckBoxList;
 	QList<QLineEdit*> mLineEditList;
 	QList<QComboBox*> mComboBoxList;
+	QCheckBox* mInstallDebugPyCheck;
+#ifdef Q_OS_WIN
+	QCheckBox* mUACPromptCheck;
+#endif
 
 	QWidget* mContent = nullptr;
 
