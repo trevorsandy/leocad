@@ -1280,7 +1280,7 @@ void lcBlenderPreferences::ConfigureBlenderAddon(bool TestBlender, bool AddonUpd
 		Arguments << "--";
 
 #ifdef Q_OS_WIN
-	if (UACPrompt)
+	if (UACPrompt && !ModuleChange)
 	{
 		if (AddonUpdate)
 		{
