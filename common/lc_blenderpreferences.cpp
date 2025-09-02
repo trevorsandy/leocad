@@ -60,6 +60,34 @@ const QLatin1String LineEnding("\r\n");
 
 #define LC_RENDER_IMAGE_MAX_SIZE           32768 // pixels
 
+using namespace std;
+static int VersionStringCompare(string v1, string v2)
+{   // Returns 1 if V2 is smaller, -1 if V1 is smaller, 0 if equal
+	int Vnum1 = 0, Vnum2 = 0;
+	for (quint32 i = 0, j = 0; (i < V1.length() || j < V2.length());)
+	{
+		while (i < V1.length() && V1[i] != '.')
+		{
+			Vnum1 = Vnum1 * 10 + (V1[i] - '0');
+			i++;
+		}
+		while (j < V2.length() && V2[j] != '.')
+		{
+			Vnum2 = Vnum2 * 10 + (V2[j] - '0');
+			j++;
+		}
+		if (Vnum1 > Vnum2)
+			return 1;
+		if (Vnum2 > Vnum1)
+			return -1;
+		Vnum1 = Vnum2 = 0;
+		i++;
+		j++;
+    }
+
+    return 0;
+}
+
 static QString WhatsThisDescription = QObject::tr(
 	"  Blender LDraw Addon Settings\n\n"
 	"  You can configure the Blender LDraw addon settings.\n"
@@ -1252,15 +1280,31 @@ void lcBlenderPreferences::ConfigureBlenderAddon(bool TestBlender, bool AddonUpd
 		Arguments << "--";
 
 #ifdef Q_OS_WIN
-		if (UACPrompt)
+	if (UACPrompt)
+	{
+		if (AddonUpdate)
 		{
-			Result = ProcessCommand(PR_PACKAGE);
-			if (Result == PR_FAIL)
+			const QString AddonVersion = mAddonVersion.split(" ").first();
+			if (VersionStringCompare(AddonVersion.toStdString(), "v1.6.2") > 0)
 			{
-				StatusUpdate(true, true, tr("Packages failed."));
-				return;
+				Result = ProcessCommand(PR_PACKAGE);
 			}
+			else
+			{
+				UACPrompt = false;
+				Result = PR_FAIL;
+				ShowMessage(this, tr("Blender Addon %1 does not support Package install.<br>"
+									 "Download the latest Blender Addon version").arg(AddonVersion));
+			}
+		} else
+			Result = ProcessCommand(PR_PACKAGE);
+
+		if (Result == PR_FAIL)
+		{
+			StatusUpdate(true, true, tr("Packages failed."));
+			return;
 		}
+	}
 #endif
 
 		if (!mRenderActBox->isChecked() && !mImportActBox->isChecked() && !mImportMMActBox->isChecked())
@@ -1375,34 +1419,6 @@ int lcBlenderPreferences::GetBlenderAddon(const QString& BlenderDir)
 	bool BlenderAddonValidated = ExtractedAddon || QFileInfo(BlenderAddonFile).isReadable();
 	AddonEnc AddonAction = ADDON_DOWNLOAD;
 	QString LocalVersion, OnlineVersion;
-
-	using namespace std;
-	auto VersionStringCompare = [](string V1, string V2)
-	{   // Returns 1 if V2 is smaller, -1 if V1 is smaller, 0 if equal
-		int Vnum1 = 0, Vnum2 = 0;
-		for (quint32 i = 0, j = 0; (i < V1.length() || j < V2.length());)
-		{
-			while (i < V1.length() && V1[i] != '.')
-			{
-				Vnum1 = Vnum1 * 10 + (V1[i] - '0');
-				i++;
-			}
-			while (j < V2.length() && V2[j] != '.')
-			{
-				Vnum2 = Vnum2 * 10 + (V2[j] - '0');
-				j++;
-			}
-			if (Vnum1 > Vnum2)
-				return 1;
-			if (Vnum2 > Vnum1)
-				return -1;
-			Vnum1 = Vnum2 = 0;
-			i++;
-			j++;
-		}
-
-		return 0;
-	};
 
 	auto GetBlenderAddonVersionMatch = [&]()
 	{
