@@ -130,10 +130,10 @@ static void lcInitializeSurfaceFormat(int argc, char* argv[])
 
     QSurfaceFormat Format = QSurfaceFormat::defaultFormat();
 #ifdef LC_WIN_ARM64 
-    /*Format.setRenderableType(QSurfaceFormat::OpenGLES);*/ 
-    Format.setRenderableType(QSurfaceFormat::OpenGL); 
-    /*Format.setVersion(3, 0);*/ 
-    Format.setVersion(4, 5); 
+    Format.setRenderableType(QSurfaceFormat::OpenGLES); 
+    /*Format.setRenderableType(QSurfaceFormat::OpenGL);*/ 
+    Format.setVersion(3, 0); 
+    /*Format.setVersion(4, 5);*/ 
     Format.setProfile(QSurfaceFormat::CoreProfile); 
     QSurfaceFormat::setDefaultFormat(Format); 
 #endif
