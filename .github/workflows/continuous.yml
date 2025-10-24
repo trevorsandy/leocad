@@ -5,6 +5,118 @@ on:
     branches: [ "master" ]
 
 jobs:
+  build-windows:
+    # if: ${{ false }} # uncomment to disable this job
+    name: 'Build ${{ matrix.name }}'
+    runs-on: ${{ matrix.runner-os }}
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        runner-os: [ windows-11-arm ]
+        platform: [ ARM64 ]
+        include:
+          - runner-os: windows-11-arm
+          - platform: ARM64
+            name: Windows 11 ARM64
+            host: _arm64
+            arch: _arm64
+    steps:
+    - name: Checkout Source
+      uses: actions/checkout@v5
+      with:
+        fetch-depth: 0
+    - name: Work Paths
+      run: |
+        Echo "LC_BUILD_BASE=$(resolve-path ..\)" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+        Echo "LC_BUILD_APPDIR=$(Join-Path (resolve-path ..\) 'appdir')" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+        New-Item -Path ..\ -Name 'appdir' -ItemType 'directory'
+    - name: Qt MSVC 2022 ${{ matrix.platform }} # path: ..\Qt\6.10.0\msvc2022_arm64\bin
+      uses: jurplel/install-qt-action@v4
+      with:
+        version: 6.10.0
+        host: windows${{ matrix.host }}
+        target: desktop
+        modules: qt5compat
+        arch: win64_msvc2022${{ matrix.arch }}
+        dir: ${{ env.LC_BUILD_BASE }}
+        cache: 'true'
+        cache-key-prefix: install-qt
+    - name: Cache Parts Library
+      uses: actions/cache@v3
+      id: cache-library
+      with:
+        path: ${{ env.LC_BUILD_APPDIR }}\library.bin
+        key: library-25.08
+    - name: Download Parts Library
+      if: steps.cache-library.outputs.cache-hit != 'true'
+      shell: cmd
+      run: |
+        curl https://github.com/leozide/leocad/releases/download/v23.03/Library-25.08.zip -Lo library.zip
+        unzip library.zip -d ${{ env.LC_BUILD_APPDIR }}
+    - name: Cache POV-Ray
+      uses: actions/cache@v3
+      id: cache-povray
+      with:
+        path: ${{ env.LC_BUILD_APPDIR }}\povconsole32-sse2.exe
+        key: povray-20.03
+    - name: Download POV-Ray
+      if: steps.cache-povray.outputs.cache-hit != 'true'
+      shell: cmd
+      run: |
+        curl https://github.com/leozide/povray/releases/download/continuous/povconsole32-sse2.exe -Lo ${{ env.LC_BUILD_APPDIR }}\povconsole32-sse2.exe
+    - name: Install NSIS with EnVar plugin
+      uses: repolevedavaj/install-nsis@v1.0.3
+      with:
+        nsis-version: 3.11
+    - name: Build ${{ matrix.name }}
+      shell: cmd
+      run: |
+        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" ${{ matrix.platform }}
+        set "CONFIG_ARGS=CONFIG+=Release CONFIG-=debug_and_release"
+        set "MAKE_ARGS=-c -f Makefile"
+        qmake -v
+        qmake %CONFIG_ARGS%
+        nmake %MAKE_ARGS%
+    - name: Stage ${{ matrix.name }}
+      shell: cmd
+      run: |
+        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" ${{ matrix.platform }}
+        if not defined VCToolsRedistDir set "VCToolsRedistDir=%VCInstallDir%\Redist\MSVC\%VCToolsVersion%"
+        copy "%VCToolsRedistDir%\vc_redist.arm64.exe" ${{ env.LC_BUILD_APPDIR }}\vc_redist.x64.exe
+        copy docs\readme.md ${{ env.LC_BUILD_APPDIR }}\readme.txt
+        copy build\release\leocad.exe ${{ env.LC_BUILD_APPDIR }}
+        windeployqt ${{ env.LC_BUILD_APPDIR }}\leocad.exe
+    - name: Check ${{ matrix.name }}
+      id: check
+      shell: cmd
+      env:
+        LEOCAD_LIB: ${{ env.LC_BUILD_APPDIR }}\library.bin
+      run: |
+        copy resources\8464.ldr ${{ env.LC_BUILD_BASE }}\8464.mpd
+        cd ${{ env.LC_BUILD_BASE }}
+        ${{ env.LC_BUILD_APPDIR }}\leocad.exe -i 8464.png -l %LEOCAD_LIB% 8464.mpd
+    - name: Package ${{ matrix.name }}
+      if: success() || ( failure() && steps.check.outcome == 'failure' )
+      shell: cmd
+      run: |
+        copy tools\setup\leocad.nsi ${{ env.LC_BUILD_BASE }}
+        copy tools\setup\setup.ico ${{ env.LC_BUILD_BASE }}
+        git rev-parse --short HEAD > version.txt
+        set /p VERSION= < version.txt
+        tar.exe -a -c -f ${{ env.LC_BUILD_BASE }}\symbols-${{ matrix.platform }}-%VERSION%.zip build\release\leocad.exe build\release\leocad.pdb
+        cd ${{ env.LC_BUILD_BASE }}
+        "C:\Program Files (x86)\NSIS\makensis.exe" /V4 /DX64 "/XOutFile LeoCAD-Windows-${{ matrix.platform }}-%VERSION%.exe" leocad.nsi
+    - name: Deploy ${{ matrix.name }}
+      if: success() || ( failure() && steps.check.outcome == 'failure' )
+      shell: cmd
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        curl https://github.com/probonopd/uploadtool/raw/master/upload.sh -Lo upload.sh
+        set UPLOADTOOL_ISPRERELEASE=1
+        if not defined GITHUB_HEAD_REF (bash upload.sh ${{ env.LC_BUILD_BASE }}/LeoCAD*.exe ${{ env.LC_BUILD_BASE }}/symbols*.zip)
+
   build-ubuntu:
     runs-on: ubuntu-latest
     steps:
