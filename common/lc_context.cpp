@@ -141,7 +141,7 @@ lcContext* lcContext::GetGlobalOffscreenContext()
 bool lcContext::CreateOffscreenContext()
 {
 	std::unique_ptr<QOpenGLContext> OffscreenContext(new QOpenGLContext());
-/*** - comment to enable the following DEBUG block
+//*** - comment to enable the following DEBUG block
 	bool result = true;
 	if (!OffscreenContext)
 	{
@@ -228,7 +228,7 @@ bool lcContext::CreateOffscreenContext()
 		return result;
 	}
 // ***/
-//*** - uncomment to disable the following block
+/*** - uncomment to disable the following block
 	if (!OffscreenContext)
 		return false;
 
