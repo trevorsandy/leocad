@@ -36,6 +36,9 @@ win32 {
 	RC_LANG = 0x0409
 
 	LIBS += -lwininet
+
+	win32-arm64-msvc: \
+    DEFINES += LC_WIN_ARM64=1
 }
 win32-msvc*|win32-arm64-msvc {
 	QMAKE_CXXFLAGS_WARN_ON += /W4 -wd4100

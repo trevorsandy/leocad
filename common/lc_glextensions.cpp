@@ -1,6 +1,8 @@
 #include "lc_global.h"
 #include "lc_glextensions.h"
+#ifndef LC_WIN_ARM64
 #include <QOpenGLFunctions_3_2_Core>
+#endif
 
 bool gSupportsShaderObjects;
 bool gSupportsVertexBufferObject;
