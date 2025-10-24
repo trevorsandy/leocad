@@ -128,9 +128,18 @@ static void lcInitializeSurfaceFormat(int argc, char* argv[])
 	QCoreApplication Application(argc, argv);
 	const lcCommandLineOptions Options = lcApplication::ParseCommandLineOptions();
 
+    QSurfaceFormat Format = QSurfaceFormat::defaultFormat();
+#ifdef LC_WIN_ARM64 
+    /*Format.setRenderableType(QSurfaceFormat::OpenGLES);*/ 
+    Format.setRenderableType(QSurfaceFormat::OpenGL); 
+    /*Format.setVersion(3, 0);*/ 
+    Format.setVersion(4, 5); 
+    Format.setProfile(QSurfaceFormat::CoreProfile); 
+    QSurfaceFormat::setDefaultFormat(Format); 
+#endif
 	if (Options.ParseOK && Options.AASamples > 1)
 	{
-		QSurfaceFormat Format = QSurfaceFormat::defaultFormat();
+		/*QSurfaceFormat Format = QSurfaceFormat::defaultFormat();*/
 		Format.setSamples(Options.AASamples);
 		QSurfaceFormat::setDefaultFormat(Format);
 	}
