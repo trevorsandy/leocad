@@ -6,6 +6,7 @@ on:
 
 jobs:
   build-ubuntu:
+    if: ${{ false }} # uncomment to disable this job
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -22,6 +23,7 @@ jobs:
       run: make -j ${{ steps.cpu-cores.outputs.count }}
 
   build-macos:
+    if: ${{ false }} # uncomment to disable this job
     runs-on: macos-latest
     steps:
     - uses: actions/checkout@v3
