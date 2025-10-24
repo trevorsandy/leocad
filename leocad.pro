@@ -37,7 +37,7 @@ win32 {
 
 	LIBS += -lwininet
 }
-win32-msvc* {
+win32-msvc*|win32-arm64-msvc {
 	QMAKE_CXXFLAGS_WARN_ON += /W4 -wd4100
 	QMAKE_CXXFLAGS *= /MP
 	PRECOMPILED_HEADER = common/lc_global.h

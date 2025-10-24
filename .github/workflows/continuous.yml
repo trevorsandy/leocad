@@ -5,6 +5,91 @@ on:
     branches: [ "master" ]
 
 jobs:
+  build-windows:
+    name: 'Build ${{ matrix.name }}'
+    runs-on: ${{ matrix.runner-os }}
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        runner-os: [ windows-11-arm ]
+        platform: [ ARM ]
+        include:
+          - runner-os: windows-11-arm
+          - platform: ARM
+            name: Windows 11 ARM64
+            host: _arm64
+            arch: _arm64
+    steps:
+    - name: Checkout Source
+      uses: actions/checkout@v5
+      with:
+        fetch-depth: 0
+    - name: Work Paths
+      run: |
+        Echo "LC_BUILD_BASE=$(resolve-path ..\)" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+        Echo "LC_BUILD_PKG_DIR=$(Join-Path (resolve-path ..\) 'buildpkg')" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+        New-Item -Path ..\ -Name 'buildpkg' -ItemType 'directory'
+    - name: Qt MSVC 2022 64bit ${{ matrix.platform }} # path: ..\Qt\6.10.0\msvc2022_arm64\bin
+      uses: jurplel/install-qt-action@v4
+      with:
+        version: 6.10.0
+        host: windows${{ matrix.host }}
+        target: desktop
+        modules: qt5compat
+        arch: win64_msvc2022${{ matrix.arch }}
+        dir: ${{ env.LC_BUILD_BASE }}
+        cache: 'true'
+        cache-key-prefix: install-qt
+    - name: Cache Parts Library
+      uses: actions/cache@v3
+      id: cache-library
+      with:
+        path: ${{ env.LC_BUILD_PKG_DIR }}\library.bin
+        key: library-25.08
+    - name: Download Parts Library
+      if: steps.cache-library.outputs.cache-hit != 'true'
+      shell: cmd
+      run: |
+        curl https://github.com/leozide/leocad/releases/download/v23.03/Library-25.08.zip -Lo library.zip
+        unzip library.zip -d ${{ env.LC_BUILD_PKG_DIR }}
+    - name: Cache POV-Ray
+      uses: actions/cache@v3
+      id: cache-povray
+      with:
+        path: ${{ env.LC_BUILD_PKG_DIR }}\povconsole32-sse2.exe
+        key: povray-20.03
+    - name: Download POV-Ray
+      if: steps.cache-povray.outputs.cache-hit != 'true'
+      shell: cmd
+      run: |
+        curl https://github.com/leozide/povray/releases/download/continuous/povconsole32-sse2.exe -Lo ${{ env.LC_BUILD_PKG_DIR }}\povconsole32-sse2.exe
+    - name: Build ${{ matrix.name }}
+      shell: cmd
+      run: |
+        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsamd64_arm64.bat"
+        git rev-parse --short HEAD > version.txt
+        set /p VERSION= < version.txt
+        set "CONFIG_ARGS=CONFIG+=Release CONFIG-=debug_and_release"
+        set "MAKE_ARGS=-c -f Makefile"
+        qmake -v
+        qmake %CONFIG_ARGS%
+        nmake %MAKE_ARGS%
+    - name: Stage ${{ matrix.name }}
+      shell: cmd
+      run: |
+        copy docs\readme.md ${{ env.LC_BUILD_PKG_DIR }}\readme.txt
+        copy resources\8464.ldr ${{ env.LC_BUILD_PKG_DIR }}\8464.mpd
+        copy build\release\leocad.exe ${{ env.LC_BUILD_PKG_DIR }}
+        windeployqt ${{ env.LC_BUILD_PKG_DIR }}\leocad.exe
+    - name: Check ${{ matrix.name }}
+      shell: cmd
+      env:
+        LEOCAD_LIB: ${{ env.LC_BUILD_PKG_DIR }}\library.bin
+      run: |
+        cd ${{ env.LC_BUILD_PKG_DIR }}
+        leocad.exe -i 8464.png -l %LEOCAD_LIB% 8464.mpd
+
   build-ubuntu:
     if: ${{ false }} # uncomment to disable this job
     runs-on: ubuntu-latest
