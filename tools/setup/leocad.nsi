@@ -26,6 +26,7 @@ InstallDirRegKey HKLM "Software\LeoCAD Software\LeoCAD" "InstallFolder"
 
 SetCompressor /SOLID lzma
 
+Var Platform
 
 ;Interface Settings
 
@@ -68,9 +69,9 @@ Section "Application Files" SecLeoCAD
   WriteRegStr HKCR "LeoCAD.Project\shell\open\command" "" '"$INSTDIR\LeoCAD.exe" "%1"'
   System::Call 'shell32.dll::SHChangeNotify(i, i, i, i) v (0x08000000, 0, 0, 0)'
 
-  IfFileExists "$INSTDIR\vc_redist.x64.exe" VcRedist64Exists PastVcRedist64Check
+  IfFileExists "$INSTDIR\vc_redist.$Platform.exe" VcRedist64Exists PastVcRedist64Check
   VcRedist64Exists:
-    ExecWait '"$INSTDIR\vc_redist.x64.exe"  /quiet /norestart'
+    ExecWait '"$INSTDIR\vc_redist.$Platform.exe"  /quiet /norestart'
   PastVcRedist64Check:
 
   ;Store installation folder
@@ -133,7 +134,7 @@ Section "Uninstall"
   Delete "$INSTDIR\readme.txt"
   Delete "$INSTDIR\library.bin"
   Delete "$INSTDIR\povconsole32-sse2.exe"
-  Delete "$INSTDIR\vc_redist.x64.exe"
+  Delete "$INSTDIR\vc_redist.$Platform.exe"
 
   RMDir "$INSTDIR"
 
@@ -146,3 +147,11 @@ Section "Uninstall"
   DeleteRegKey /ifempty HKCU "Software\LeoCAD Software\LeoCAD"
 
 SectionEnd
+
+Function .onInit
+!ifdef ARM64
+  StrCpy $Platform "arm64"
+!else
+  StrCpy $Platform "x64"
+!endif
+FunctionEnd

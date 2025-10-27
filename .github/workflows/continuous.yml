@@ -13,14 +13,26 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner-os: [ windows-11-arm ]
-        platform: [ ARM64 ]
-        include:
+        runner-os: [ windows-2025, windows-11-arm ]
+        platform: [ AMD64, ARM64 ]
+        exclude:
+          - runner-os: windows-2025
+            platform: ARM64
           - runner-os: windows-11-arm
+            platform: AMD64
+        include:
+          - runner-os: windows-2025
+          - runner-os: windows-11-arm
+          - platform: AMD64
+            name: Windows 2025 AMD64
+            host: ''
+            arch: _64
+            vca: X64
           - platform: ARM64
             name: Windows 11 ARM64
             host: _arm64
             arch: _arm64
+            vca: ARM64
     steps:
     - name: Checkout Source
       uses: actions/checkout@v5
@@ -64,8 +76,10 @@ jobs:
       if: steps.cache-povray.outputs.cache-hit != 'true'
       shell: cmd
       run: |
+        :: the x86 version of POVRay will work on ARM64 in emulation mode but will be less efficient.
         curl https://github.com/leozide/povray/releases/download/continuous/povconsole32-sse2.exe -Lo ${{ env.LC_BUILD_APPDIR }}\povconsole32-sse2.exe
-    - name: Install NSIS with EnVar plugin
+    - name: Install NSIS with EnVar plugin # missing in Windows 2025 but pre-installed in windows-11-arm
+      if: ${{ matrix.runner-os == 'windows-2025' && matrix.platform == 'AMD64' }}
       uses: repolevedavaj/install-nsis@v1.0.3
       with:
         nsis-version: 3.11
@@ -82,20 +96,17 @@ jobs:
       shell: cmd
       run: |
         call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" ${{ matrix.platform }}
-        if not defined VCToolsRedistDir set "VCToolsRedistDir=%VCInstallDir%\Redist\MSVC\%VCToolsVersion%"
-        copy "%VCToolsRedistDir%\vc_redist.arm64.exe" ${{ env.LC_BUILD_APPDIR }}\vc_redist.x64.exe
         copy docs\readme.md ${{ env.LC_BUILD_APPDIR }}\readme.txt
         copy build\release\leocad.exe ${{ env.LC_BUILD_APPDIR }}
         windeployqt ${{ env.LC_BUILD_APPDIR }}\leocad.exe
     - name: Check ${{ matrix.name }}
+      if: ${{ matrix.runner-os == 'windows-11-arm' }}
       id: check
       shell: cmd
-      env:
-        LEOCAD_LIB: ${{ env.LC_BUILD_APPDIR }}\library.bin
       run: |
         copy resources\8464.ldr ${{ env.LC_BUILD_BASE }}\8464.mpd
         cd ${{ env.LC_BUILD_BASE }}
-        ${{ env.LC_BUILD_APPDIR }}\leocad.exe -i 8464.png -l %LEOCAD_LIB% 8464.mpd
+        ${{ env.LC_BUILD_APPDIR }}\leocad.exe -i 8464.png -l ${{ env.LC_BUILD_APPDIR }}\library.bin 8464.mpd
     - name: Package ${{ matrix.name }}
       if: success() || ( failure() && steps.check.outcome == 'failure' )
       shell: cmd
@@ -106,7 +117,7 @@ jobs:
         set /p VERSION= < version.txt
         tar.exe -a -c -f ${{ env.LC_BUILD_BASE }}\symbols-${{ matrix.platform }}-%VERSION%.zip build\release\leocad.exe build\release\leocad.pdb
         cd ${{ env.LC_BUILD_BASE }}
-        "C:\Program Files (x86)\NSIS\makensis.exe" /V4 /DX64 "/XOutFile LeoCAD-Windows-${{ matrix.platform }}-%VERSION%.exe" leocad.nsi
+        "C:\Program Files (x86)\NSIS\makensis.exe" /V4 /D${{ matrix.vca }} "/XOutFile LeoCAD-Windows-${{ matrix.platform }}-%VERSION%.exe" leocad.nsi
     - name: Deploy ${{ matrix.name }}
       if: success() || ( failure() && steps.check.outcome == 'failure' )
       shell: cmd
