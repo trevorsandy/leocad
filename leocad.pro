@@ -45,7 +45,9 @@ win32-msvc*|win32-arm64-msvc {
 	DEFINES += _CRT_SECURE_NO_WARNINGS _CRT_SECURE_NO_DEPRECATE=1 _CRT_NONSTDC_NO_WARNINGS=1
 	INCLUDEPATH += $$[QT_INSTALL_HEADERS]/QtZlib
 	QMAKE_LFLAGS += /INCREMENTAL
-	LIBS += -ladvapi32 -lshell32 -lopengl32 -luser32
+	LIBS += -ladvapi32 -lshell32 -luser32
+	LIBS += glu32.lib OpenGL32.lib Shlwapi.lib
+    LIBS += $$QMAKE_LIBS_NETWORK $$QMAKE_LIBS_OPENGL $$QMAKE_LIBS_GUI
 } else {
 	PRECOMPILED_HEADER = common/lc_global.h
 	LIBS += -lz
